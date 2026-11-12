@@ -41,6 +41,7 @@
   .resumo b { display:block; font-size:20px; color:#202124; }
   .vazio { text-align:center; color:var(--cinza); padding:30px 10px; }
   .dica { font-size:12px; color:var(--cinza); margin-top:4px; }
+  .segredo { -webkit-text-security:disc; }
   header { display:flex; justify-content:space-between; align-items:center; }
   header button { border:0; border-radius:18px; padding:7px 12px; font-size:14px; font-weight:600; background:#fff; color:var(--azul); }
   .resumo div { cursor:pointer; }
@@ -104,7 +105,9 @@
       </div>
       <datalist id="dl-formas"><option>Comprimido</option><option>Cápsula</option><option>Xarope</option><option>Suspensão oral</option><option>Gotas</option><option>Colírio</option><option>Pomada</option><option>Creme</option><option>Supositório</option><option>Spray nasal</option><option>Saquetas</option></datalist>
       <div class="duas">
-        <div><label>Validade (da caixa)</label><input type="date" id="m-Validade"></div>
+        <div><label>Validade (mês / ano)</label>
+          <div class="linha" style="flex-wrap:nowrap"><select id="m-ValMes" style="flex:1"></select><select id="m-ValAno" style="flex:1.3"></select></div>
+          <input type="hidden" id="m-Validade"></div>
         <div><label>Local</label><input id="m-Local" list="dl-locais" placeholder="Armário WC"></div>
       </div>
       <datalist id="dl-locais"></datalist>
@@ -169,7 +172,7 @@
       <h3>Ligação ao teu Google Sheet</h3>
       <div class="sub">Fica guardada só neste telemóvel. Vê no Sheet: menu 💊 Medicamentos → Mostrar chave / ligação.</div>
       <label>URL do script (termina em /exec)</label><input id="c-url" placeholder="https://script.google.com/macros/s/…/exec">
-      <label>Chave secreta</label><input id="c-key" type="password" autocomplete="off">
+      <label>Chave secreta</label><input id="c-key" type="text" class="segredo" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other">
       <div class="acoes">
         <button class="btn" onclick="guardarConfig()">Guardar e testar</button>
         <button class="btn perigo" onclick="esquecerConfig()">Esquecer neste telemóvel</button>
@@ -200,7 +203,7 @@
     <button class="btn perigo peq" onclick="fecharLeitor()">✕ Desligar</button>
   </div>
   <div id="leitor"></div>
-  <p id="leitor-dica" style="color:#ddd;font-size:13px;text-align:center;margin:6px 0">Aponta para o quadradinho (Data Matrix) da caixa</p>
+  <p id="leitor-dica" style="color:#ddd;font-size:13px;text-align:center;margin:6px 0">Aponta para o quadradinho (Data Matrix) ou para o código de barras</p>
   <div id="leitor-res"></div>
 </div>
 <div id="aviso"></div>
@@ -214,8 +217,10 @@ function lerGS1(texto) {
   s = s.replace(/[\u001dè~]/g, '\u001d');
   const so = s.replace(/\u001d/g, '');
   const res = {};
-  if (/^\d{7}$/.test(so)) { res.nregisto = so; return res; }          // código antigo com nº de registo
-  if (/^\d{13,14}$/.test(so)) { res.gtin = so.padStart(14, '0'); return res; } // EAN-13 / GTIN
+  // códigos de barras simples (sem validade nem nº de série)
+  const simples = so.replace(/^\*|\*$/g, '').replace(/^(CNP|NR|PT)[\s:-]*/i, '').trim();
+  if (/^\d{7}$/.test(simples)) { res.nregisto = simples; return res; }             // nº de registo (CNP)
+  if (/^\d{8}$|^\d{12,14}$/.test(simples) && !/^01\d{14}/.test(so)) { res.gtin = simples.padStart(14, '0'); return res; } // EAN-8 / UPC / EAN-13 / GTIN
 
   const FIXO = { '01': 14, '17': 6, '11': 6, '15': 6 };
   const VAR = { '10': 20, '21': 20, '710': 20, '711': 20, '712': 20, '713': 20, '714': 20, '715': 20 };
@@ -449,6 +454,7 @@ function cartaoMed(m, mot) {
         <button class="btn sec peq" onclick="irUsar('${esc(m.ID)}')">📝 Usar</button>
         ${!m.DataAbertura ? `<button class="btn sec peq" onclick="abrirMed('${esc(m.ID)}')">📂 Abri hoje</button>` : ''}
         <button class="btn sec peq" onclick="editar('${esc(m.ID)}')">✏️ Editar</button>
+        <button class="btn sec peq" onclick="duplicar('${esc(m.ID)}')">➕ Outra igual</button>
         <button class="btn perigo peq" onclick="estado('${esc(m.ID)}','Terminado')">Terminou</button>
         <button class="btn perigo peq" onclick="estado('${esc(m.ID)}','Deitado fora')">🗑️ Fora</button>`
       : `<button class="btn sec peq" onclick="estado('${esc(m.ID)}','Disponível')">Repor</button>`}
@@ -503,15 +509,66 @@ $('f-texto').oninput = desenharInventario;
 /* ============ FORMULÁRIO ============ */
 const CAMPOS = ['ID', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Notas'];
 function limparForm() {
-  CAMPOS.forEach(c => $('m-' + c).value = ''); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias';
+  CAMPOS.forEach(c => $('m-' + c).value = ''); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none';
 }
 function editar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm(); CAMPOS.forEach(c => $('m-' + c).value = m[c] == null ? '' : m[c]);
-  if (!$('m-UnidadePrazo').value) $('m-UnidadePrazo').value = 'dias';
+  if (!$('m-UnidadePrazo').value) $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; mostrar('adicionar');
 }
+/* --- validade por mês/ano (como vem na caixa); guarda o último dia do mês --- */
+(function () {
+  const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  $('m-ValMes').innerHTML = '<option value="">mês</option>' + meses.map((m, i) => `<option value="${i + 1}">${String(i + 1).padStart(2, '0')} ${m}</option>`).join('');
+  const a = new Date().getFullYear();
+  let anos = '<option value="">ano</option>'; for (let y = a - 3; y <= a + 8; y++) anos += `<option>${y}</option>`;
+  $('m-ValAno').innerHTML = anos;
+  const juntar = () => {
+    const m = +$('m-ValMes').value, y = +$('m-ValAno').value;
+    $('m-Validade').value = m && y ? `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` : '';
+  };
+  $('m-ValMes').onchange = () => { if ($('m-ValMes').value && !$('m-ValAno').value) $('m-ValAno').value = String(a + 1); juntar(); };
+  $('m-ValAno').onchange = juntar;
+})();
+function mostrarValidade() {
+  const v = $('m-Validade').value, m = v.match(/^(\d{4})-(\d{2})/);
+  if (m && ![...$('m-ValAno').options].some(o => o.value === m[1])) $('m-ValAno').insertAdjacentHTML('beforeend', `<option>${m[1]}</option>`);
+  $('m-ValMes').value = m ? String(+m[2]) : ''; $('m-ValAno').value = m ? m[1] : '';
+}
+
+/* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
+const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN'];
+function modeloPorNome(nome) {
+  const n = norm(nome); if (!n) return null;
+  const cat = D.catalogo.find(c => norm(c.Nome) === n);
+  const inv = D.inventario.filter(m => norm(m.Nome) === n).pop();
+  if (!cat && !inv) return null;
+  const r = {}; DADOS_PRODUTO.concat(['Nome']).forEach(c => { const v = cat && cat[c] !== '' && cat[c] != null ? cat[c] : (inv ? inv[c] : ''); r[c] = v == null ? '' : v; });
+  return r;
+}
+function preencherVazios(mod, campos) {
+  let n = 0;
+  (campos || DADOS_PRODUTO).forEach(c => {
+    if (mod[c] === '' || mod[c] == null) return;
+    const el = $('m-' + c);
+    if (el.value === '' || (c === 'UnidadePrazo' && !$('m-DiasAposAbertura').value)) { el.value = mod[c]; n++; }
+  });
+  return n;
+}
+// escolher um nome da lista preenche o resto
+$('m-Nome').addEventListener('change', () => {
+  const mod = modeloPorNome($('m-Nome').value);
+  if (mod && preencherVazios(mod)) aviso('✅ Dados de ' + mod.Nome + ' preenchidos. Falta a validade.');
+});
+function duplicar(id) {
+  const m = D.inventario.find(x => x.ID === id); if (!m) return;
+  limparForm();
+  ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local'].forEach(c => { if (m[c] != null && m[c] !== '') $('m-' + c).value = m[c]; });
+  mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
+}
+
 function filtrar(v) { mostrar('inventario'); $('f-estado').value = v; $('f-pessoa').value = ''; $('f-texto').value = ''; desenharInventario(); }
 const textoPrazo = m => temNum(m.DiasAposAbertura) && Number(m.DiasAposAbertura) > 0 ? Number(m.DiasAposAbertura) + ' ' + (m.UnidadePrazo || 'dias') : '';
 /** "3 meses", "3m", "4 sem", "28" → { n, unidade } */
@@ -529,24 +586,31 @@ const mesmoProduto = (m, r) => (r.nregisto && cod(m.NRegisto) === cod(r.nregisto
 /** Devolve { exata } | { semSerie:[...], outras:[...] } — "semSerie" = caixas antigas deste medicamento ainda sem código único */
 function encontrarCaixa(r) {
   const exata = D.inventario.find(m => mesmaCaixa(m, r));
-  if (exata) return { exata };
+  if (exata) return { exata, semSerie: [], outras: [] };
   const iguais = D.inventario.filter(m => m.Estado === 'Disponível' && mesmoProduto(m, r));
   return { semSerie: iguais.filter(m => !m.Serie), outras: iguais.filter(m => m.Serie) };
 }
 function catalogoDe(r) { return D.catalogo.find(c => mesmoProduto(c, r)); }
 
+function modeloPorCodigo(r) {
+  const cat = catalogoDe(r), inv = D.inventario.filter(m => mesmoProduto(m, r)).pop();
+  if (!cat && !inv) return null;
+  const o = {}; DADOS_PRODUTO.concat(['Nome']).forEach(c => { const v = cat && cat[c] !== '' && cat[c] != null ? cat[c] : (inv ? inv[c] : ''); o[c] = v == null ? '' : v; });
+  return o;
+}
 function preencherNova(txt, r) {
   limparForm(); mostrar('adicionar');
   $('m-codigo').value = String(txt).replace(/\u001d/g, '');
   $('m-GTIN').value = r.gtin || ''; $('m-Serie').value = r.serie || '';
   if (r.nregisto) $('m-NRegisto').value = r.nregisto;
   if (r.lote) $('m-Lote').value = r.lote;
-  if (r.validade) $('m-Validade').value = r.validade;
-  const cat = catalogoDe(r);
-  if (cat) {
-    ['Nome', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'DiasAposAbertura', 'UnidadePrazo'].forEach(c => { if (cat[c] !== '' && cat[c] != null) $('m-' + c).value = cat[c]; });
-    aviso('✅ Reconhecido: ' + cat.Nome + ' (caixa nova)');
+  if (r.validade) { $('m-Validade').value = r.validade; mostrarValidade(); }
+  const mod = modeloPorCodigo(r);
+  if (mod) {
+    $('m-Nome').value = mod.Nome; preencherVazios(mod);
+    aviso('✅ Reconhecido: ' + mod.Nome + (r.validade ? ' (caixa nova)' : ' — falta só a validade'), 4000);
   } else aviso('Código lido. Medicamento novo: escreve o nome e a substância (fica memorizado).', 4000);
+  if (!r.validade) setTimeout(() => $('m-ValMes').focus(), 300);
   if (r.validade && r.validade < hojeISO()) aviso('⚠️ Atenção: esta caixa já está fora de validade (' + fmt(r.validade) + ')', 5000);
 }
 
@@ -555,7 +619,7 @@ function aplicarCodigo(txt) {
   const r = lerGS1(txt);
   if (!r.gtin && !r.nregisto && !r.validade) { aviso('Não consegui ler este código. Preenche à mão.'); return; }
   const e = encontrarCaixa(r);
-  if (e.exata || e.semSerie.length) { abrirPainel(txt, r, 'adicionar'); return; }
+  if (r.serie && (e.exata || e.semSerie.length)) { abrirPainel(txt, r, 'adicionar'); return; }
   preencherNova(txt, r);
 }
 
@@ -640,15 +704,15 @@ const TITULOS = { verificar: '🔍 Verificar caixas', adicionar: '➕ Ler caixa 
 async function abrirLeitor(modo) {
   modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 };
   $('leitor-titulo').textContent = TITULOS[modo] || '📷 Ler caixa';
-  $('leitor-dica').textContent = modo === 'verificar' ? 'Aponta para o quadradinho de cada caixa. A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) da caixa';
+  $('leitor-dica').textContent = modo === 'verificar' ? 'Lê as caixas uma a uma (quadradinho ou código de barras). A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) ou para o código de barras';
   $('leitor-res').innerHTML = ''; $('leitor').style.display = 'block';
   $('leitorModal').style.display = 'flex';
   try { await carregarLib(); }
   catch (e) { $('leitorModal').style.display = 'none'; aviso('Leitor indisponível (' + e.message + '). Cola o código à mão.'); return; }
   const F = Html5QrcodeSupportedFormats;
-  leitor = new Html5Qrcode('leitor', { formatsToSupport: [F.DATA_MATRIX, F.EAN_13, F.CODE_128, F.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
+  leitor = new Html5Qrcode('leitor', { formatsToSupport: [F.DATA_MATRIX, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.CODE_93, F.ITF, F.CODABAR, F.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
   try {
-    await leitor.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 220, height: 220 } }, txt => {
+    await leitor.start({ facingMode: 'environment' }, { fps: 12, qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(Math.min(w * 0.55, h * 0.8)) }) }, txt => {
       if (txt === ultima.txt && Date.now() - ultima.t < 4000) return;   // mesma caixa ainda à frente da câmara
       ultima = { txt, t: Date.now() };
       if (navigator.vibrate) navigator.vibrate(60);
@@ -670,7 +734,13 @@ async function tratarLeitura(txt) {
   // modos de uma leitura só: desliga a câmara
   await pararCamara();
   if (modoLeitor === 'usar' && e.exata && e.exata.Estado === 'Disponível') { await fecharLeitor(); irUsar(e.exata.ID); aviso('📦 ' + e.exata.Nome); return; }
-  if (modoLeitor === 'adicionar' && !e.exata && !e.semSerie.length) { await fecharLeitor(); preencherNova(txt, r); return; }
+  const todas = e.exata ? [] : e.semSerie.concat(e.outras);
+  if (modoLeitor === 'usar' && !r.serie && todas.length === 1) { await fecharLeitor(); irUsar(todas[0].ID); aviso('📦 ' + todas[0].Nome); return; }
+  if (modoLeitor === 'adicionar' && (!r.serie || (!e.exata && !e.semSerie.length))) {
+    await fecharLeitor(); preencherNova(txt, r);
+    if (!r.serie && todas.length) aviso(`Tens ${todas.length} caixa(s) deste medicamento. Esta é nova? Indica a validade.`, 4000);
+    return;
+  }
   mostrarPainel(txt, r);
 }
 // abre o painel sem câmara (ex.: código colado à mão)
@@ -680,9 +750,10 @@ function abrirPainel(txt, r, modo) {
   $('leitorModal').style.display = 'flex'; mostrarPainel(txt, r);
 }
 
-function mostrarPainel(txt, r) {
-  painelAtual = { txt, r };
+function mostrarPainel(txt, r, idEscolhido) {
+  painelAtual = { txt, r, id: idEscolhido };
   const e = encontrarCaixa(r);
+  if (idEscolhido) e.exata = D.inventario.find(m => m.ID === idEscolhido);
   const cat = catalogoDe(r) || e.semSerie[0] || e.outras[0];
   const nome = e.exata ? e.exata.Nome : (cat ? cat.Nome : 'Medicamento desconhecido');
   let html = '';
@@ -708,7 +779,17 @@ function mostrarPainel(txt, r) {
     const val = r.validade ? estadoValidade({ ValidadeReal: r.validade }) : { cls: 'neutro', txt: '' };
     html += `<div class="banner ${val.cls}">${r.validade ? (val.cls === 'exp' ? '❌ EXPIRADA' : val.cls === 'aviso' ? '⚠️ ' + val.txt : '✅ Dentro da validade') : 'Sem validade no código'}
       <small>${esc(nome)} · validade impressa: ${fmt(r.validade) || '—'}</small></div>`;
-    if (e.semSerie.length) {
+    const todas = e.semSerie.concat(e.outras).sort((a, b) => estadoValidade(a).ord - estadoValidade(b).ord);
+    if (!r.serie && todas.length) {
+      // código de barras simples: identifica o medicamento, não a caixa
+      html = `<div class="banner neutro">${esc(nome)}<small>Código de barras simples: não diz qual é a caixa. Escolhe a que tens na mão.</small></div>`;
+      html += '<div class="cartao">' + todas.map(m => { const ev = estadoValidade(m); return `
+        <div style="border-top:1px solid #eee;padding:8px 0" class="linha">
+          <span class="badge ${ev.cls}">${ev.txt}</span>
+          <span class="sub" style="flex:1">📅 ${fmt(m.ValidadeReal) || '—'} · 👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}${m.DataAbertura ? ' · aberta' : ''}${textoQtd(m) ? ' · resta ' + textoQtd(m) : ''}</span>
+          <button class="btn sec peq" onclick="mostrarPainel(painelAtual.txt, painelAtual.r, '${esc(m.ID)}')">Esta</button>
+        </div>`; }).join('') + `<div class="acoes"><button class="btn peq" onclick="painelAcao('nova')">➕ É uma caixa nova</button></div></div>`;
+    } else if (e.semSerie.length) {
       html += `<div class="cartao"><b>Tens ${e.semSerie.length} caixa(s) de ${esc(nome)} registada(s) antes do código único. É uma destas?</b>
         <div class="dica">Ao escolheres, o código fica associado e esta caixa passa a ser reconhecida.</div>`;
       html += e.semSerie.sort((a, b) => (b.Validade === r.validade) - (a.Validade === r.validade)).map(m => `
@@ -748,9 +829,14 @@ async function painelAcao(acao, id) {
   if (acao === 'abrir') ok = await abrirMed(id);
   if (acao === 'fora') ok = await estado(id, 'Deitado fora');
   if (acao === 'repor') ok = await estado(id, 'Disponível');
-  if (ok && painelAtual) mostrarPainel(p.txt, p.r);
+  if (ok && painelAtual) mostrarPainel(p.txt, p.r, p.id);
 }
 
+document.querySelectorAll('input, textarea').forEach(el => {
+  if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
+  el.setAttribute('data-lpignore', 'true'); el.setAttribute('data-1p-ignore', ''); el.setAttribute('data-form-type', 'other');
+});
+mostrarValidade();
 carregar();
 </script>
 </body>
