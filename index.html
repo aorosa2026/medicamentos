@@ -108,8 +108,12 @@
       <div id="lista-regulares"></div>
       <label>Nome</label><input id="g-Nome" placeholder="ex.: Paracetamol, Anti-histamínico, Arnica">
       <label>Procurar por (opcional)</label><input id="g-Procura" placeholder="ex.: paracetamol xarope, paracetamol supositório">
-      <div class="dica">Procura no nome, substância, dosagem e forma das caixas. Vírgula = "ou"; várias palavras juntas = "todas".<br>
-        Ex.: <i>bilastina, cetirizina</i> (qualquer uma) · <i>paracetamol comprimido</i> (adulto) · <i>paracetamol xarope, paracetamol supositório</i> (criança).</div>
+      <div class="dica" style="line-height:1.5">
+        Se ficar vazio, a app procura o <b>Nome</b> nas caixas (nome, substância, dosagem e forma).<br>
+        <b>Várias opções:</b> separa com vírgulas, basta uma. Ex.: <i>bilastina, cetirizina</i><br>
+        <b>Ser mais específico:</b> escreve as palavras juntas, têm de estar todas. Ex.: <i>paracetamol comprimido</i> = só o de adulto<br>
+        <b>As duas coisas:</b> <i>paracetamol xarope, paracetamol supositório</i> = paracetamol de criança
+      </div>
       <div class="duas">
         <div><label>Mínimo de caixas</label><input type="number" min="1" id="g-Minimo" value="1"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn sec" style="width:100%" onclick="guardarRegular()">Guardar</button></div>
@@ -565,7 +569,7 @@ function cartaoMed(m, mot) {
     <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || '—'}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
     ${qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
     ${motivos.length ? `<div class="sub">💬 Usado para: ${esc(motivos.join(', '))}</div>` : ''}
-    ${m.ComoTomar ? `<div style="font-size:14px;margin-top:4px;background:#e8f0fe;border-radius:6px;padding:5px 8px">💊 ${esc(m.ComoTomar)}</div>` : ''}
+    ${m.ComoTomar ? `<div style="font-size:14px;margin-top:4px;background:#fef7e0;border-radius:6px;padding:5px 8px">💊 ${esc(m.ComoTomar)}</div>` : ''}
     ${m.ReceitadoPor ? `<div class="sub">🩺 ${esc(m.ReceitadoPor)}</div>` : ''}
     ${m.Notas ? `<div class="sub">📝 ${esc(m.Notas)}</div>` : ''}
     <div class="acoes">
@@ -633,22 +637,30 @@ function desenharStock() {
       <button class="btn perigo peq" data-n="${esc(r.Nome)}" onclick="apagarRegular(this.dataset.n)">✕</button></div>`; }).join('')
     : '<div class="sub">Ainda não há regulares. Adiciona em baixo (ex.: Paracetamol, Ibuprofeno…).</div>';
   // stock agrupado por nome
-  const g = {};
+  const g = {}, ordem = { exp: 0, aviso: 1, ok: 2 };
   D.inventario.filter(m => m.Estado === 'Disponível').forEach(m => {
-    const k = norm(m.Nome); const x = g[k] = g[k] || { nome: m.Nome, subst: m.Substancia, caixas: 0, validas: 0, total: 0, temQtd: false, unidade: m.Unidade, prox: '' };
-    x.caixas++; if (valida(m, hoje)) { x.validas++; const r = restante(m); if (r != null) { x.total += r; x.temQtd = true; }
+    const k = (eHomeo(m) ? 'h:' : 'm:') + norm(m.Nome);
+    const x = g[k] = g[k] || { nome: m.Nome, homeo: eHomeo(m), subst: m.Substancia, caixas: 0, validas: 0, total: 0, temQtd: false, unidade: m.Unidade, prox: '', pior: 'ok', acabar: 0 };
+    x.caixas++;
+    const ev = estadoValidade(m).cls; if (ev !== 'neutro' && ordem[ev] < ordem[x.pior]) x.pior = ev;
+    if (valida(m, hoje)) { x.validas++; if (aAcabar(m)) x.acabar++; const r = restante(m); if (r != null) { x.total += r; x.temQtd = true; }
       if (m.ValidadeReal && (!x.prox || m.ValidadeReal < x.prox)) x.prox = m.ValidadeReal; }
     if (!x.unidade && m.Unidade) x.unidade = m.Unidade;
   });
-  const l = Object.values(g).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
-  $('stock').innerHTML = l.length ? l.map(x => `<div style="border-top:1px solid #eee;padding:7px 0">
+  const cor = x => x.validas ? 'ok' : 'exp';
+  const bloco = (titulo, l) => l.length ? `<div style="margin-top:8px;font-weight:600">${titulo}</div>` + l.map(x => `<div style="border-top:1px solid #eee;padding:7px 0">
       <div class="linha" style="justify-content:space-between"><b>${esc(x.nome)}</b>
-      <span class="badge ${x.validas ? 'ok' : 'exp'}">${x.validas} caixa(s)${x.caixas > x.validas ? ' + ' + (x.caixas - x.validas) + ' expirada(s)' : ''}</span></div>
+      <span class="badge ${cor(x)}">${x.validas} caixa(s)${x.caixas > x.validas ? ' + ' + (x.caixas - x.validas) + ' expirada(s)' : ''}</span></div>
       <div class="sub">${[esc(x.subst || ''), x.temQtd ? 'total ' + Math.round(x.total * 100) / 100 + ' ' + esc(x.unidade || '') : '', x.prox ? 'próxima validade ' + fmt(x.prox) : ''].filter(Boolean).join(' · ')}</div>
-      <button class="btn sec peq" style="margin-top:4px" data-n="${esc(x.nome)}" onclick="verCaixas(this.dataset.n)">Ver caixas</button></div>`).join('')
-    : '<div class="sub">Sem medicamentos disponíveis.</div>';
+      <button class="btn sec peq" style="margin-top:4px" data-n="${esc(x.nome)}" data-h="${x.homeo ? 1 : ''}" onclick="verCaixas(this.dataset.n, !!this.dataset.h)">Ver caixas</button></div>`).join('') : '';
+  const l = Object.values(g).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  $('stock').innerHTML = (bloco('💊 Medicamentos', l.filter(x => !x.homeo)) + bloco('🌿 Homeopáticos', l.filter(x => x.homeo)))
+    || '<div class="sub">Sem medicamentos disponíveis.</div>';
 }
-function verCaixas(nome) { mostrar('inventario'); $('f-estado').value = 'Disponível'; $('f-pessoa').value = ''; $('f-texto').value = nome; desenharInventario(); }
+function verCaixas(nome, homeo) {
+  pref.tipo = homeo ? 'homeo' : 'med'; guardarPref();
+  mostrar('inventario'); $('f-estado').value = 'Disponível'; $('f-pessoa').value = ''; $('f-texto').value = nome; desenharInventario();
+}
 function editarRegular(nome) {
   const r = D.regulares.find(x => x.Nome === nome); if (!r) return;
   $('g-Nome').value = r.Nome; $('g-Procura').value = r.Procura || ''; $('g-Minimo').value = r.Minimo || 1; $('g-Nome').scrollIntoView({ block: 'center' });
@@ -923,7 +935,7 @@ function infoUso() {
   $('u-abrir').checked = false;
   $('u-abrir').parentElement.style.display = m && !m.DataAbertura ? 'flex' : 'none';
   $('u-qtd-label').textContent = 'Quantidade tomada' + (m && m.Unidade ? ' (' + m.Unidade + ')' : '');
-  $('u-info').innerHTML = m ? (m.ComoTomar ? `<div style="font-size:14px;color:#202124;background:#e8f0fe;border-radius:6px;padding:6px 8px;margin:4px 0">💊 ${esc(m.ComoTomar)}${m.ReceitadoPor ? '<br><span class="sub">🩺 ' + esc(m.ReceitadoPor) + '</span>' : ''}</div>` : '') +
+  $('u-info').innerHTML = m ? (m.ComoTomar ? `<div style="font-size:14px;color:#202124;background:#fef7e0;border-radius:6px;padding:6px 8px;margin:4px 0">💊 ${esc(m.ComoTomar)}${m.ReceitadoPor ? '<br><span class="sub">🩺 ' + esc(m.ReceitadoPor) + '</span>' : ''}</div>` : '') +
     [textoQtd(m) ? '📦 Resta: ' + textoQtd(m) : '', m.Local ? '📍 ' + esc(m.Local) : '', m.ValidadeReal ? '📅 ' + fmt(m.ValidadeReal) : ''].filter(Boolean).join(' · ') : '';
 }
 $('u-MedID').onchange = infoUso;
