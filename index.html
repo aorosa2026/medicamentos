@@ -582,15 +582,19 @@ function lerPrazo(t) {
 /* ============ RECONHECER A CAIXA PELO CÓDIGO ============ */
 const cod = v => String(v == null ? '' : v).trim().toUpperCase();
 const mesmaCaixa = (m, r) => !!r.serie && cod(m.Serie) === cod(r.serie) && cod(m.GTIN) === cod(r.gtin);
-const mesmoProduto = (m, r) => (r.nregisto && cod(m.NRegisto) === cod(r.nregisto)) || (r.gtin && cod(m.GTIN) === cod(r.gtin));
+const mesmoCodigo = (m, r) => (r.nregisto && cod(m.NRegisto) === cod(r.nregisto)) || (r.gtin && cod(m.GTIN) === cod(r.gtin));
+// nomes de medicamento ligados a este código no catálogo (um medicamento pode ter vários códigos)
+const nomesDoCodigo = r => new Set(D.catalogo.filter(c => mesmoCodigo(c, r)).map(c => norm(c.Nome)));
+const mesmoProduto = (m, r, nomes) => mesmoCodigo(m, r) || (nomes || nomesDoCodigo(r)).has(norm(m.Nome));
 /** Devolve { exata } | { semSerie:[...], outras:[...] } — "semSerie" = caixas antigas deste medicamento ainda sem código único */
 function encontrarCaixa(r) {
   const exata = D.inventario.find(m => mesmaCaixa(m, r));
   if (exata) return { exata, semSerie: [], outras: [] };
-  const iguais = D.inventario.filter(m => m.Estado === 'Disponível' && mesmoProduto(m, r));
+  const nomes = nomesDoCodigo(r);
+  const iguais = D.inventario.filter(m => m.Estado === 'Disponível' && mesmoProduto(m, r, nomes));
   return { semSerie: iguais.filter(m => !m.Serie), outras: iguais.filter(m => m.Serie) };
 }
-function catalogoDe(r) { return D.catalogo.find(c => mesmoProduto(c, r)); }
+function catalogoDe(r) { return D.catalogo.find(c => mesmoCodigo(c, r)); }
 
 function modeloPorCodigo(r) {
   const cat = catalogoDe(r), inv = D.inventario.filter(m => mesmoProduto(m, r)).pop();
@@ -798,6 +802,14 @@ function mostrarPainel(txt, r, idEscolhido) {
           <button class="btn sec peq" style="margin-top:4px" onclick="associar('${esc(m.ID)}')">É esta</button>
         </div>`).join('');
       html += `<div class="acoes"><button class="btn peq" onclick="painelAcao('nova')">Não, é uma caixa nova</button></div></div>`;
+    } else if (!catalogoDe(r) && D.inventario.length) {
+      // código nunca visto: pode ser de um medicamento registado à mão
+      html = `<div class="banner neutro">Código desconhecido<small>${r.nregisto ? 'Nº registo ' + esc(r.nregisto) : 'Código ' + esc(r.gtin || '')}${r.validade ? ' · validade ' + fmt(r.validade) : ''}</small></div>
+        <div class="cartao"><b>É de algum destes medicamentos?</b>
+        <div class="dica">Ao escolheres, este código fica associado ao medicamento e todas as caixas dele passam a ser reconhecidas.</div>
+        <input id="assoc-filtro" placeholder="🔎 Procurar nome…" style="margin:8px 0" oninput="filtrarAssoc()">
+        <div id="assoc-lista"></div>
+        <div class="acoes"><button class="btn peq" onclick="painelAcao('nova')">Não, é um medicamento novo</button></div></div>`;
     } else {
       html += `<div class="cartao"><b>Esta caixa não está registada.</b>
         ${e.outras.length ? `<div class="sub">Tens mais ${e.outras.length} caixa(s) deste medicamento registada(s).</div>` : ''}
@@ -807,6 +819,35 @@ function mostrarPainel(txt, r, idEscolhido) {
   if (modoLeitor === 'verificar') html += '<div class="dica" style="color:#ddd;text-align:center">Podes ler a caixa seguinte.</div>';
   else if (!leitor) html += `<div class="acoes" style="justify-content:center"><button class="btn sec" onclick="abrirLeitor('${modoLeitor}')">📷 Ler outra</button></div>`;
   $('leitor-res').innerHTML = html;
+  if ($('assoc-lista')) filtrarAssoc();
+}
+
+function filtrarAssoc() {
+  const f = norm($('assoc-filtro').value);
+  const grupos = {};
+  D.inventario.forEach(m => { const k = norm(m.Nome); if (!k || (f && !k.includes(f) && !norm(m.Substancia).includes(f))) return;
+    const g = grupos[k] = grupos[k] || { nome: m.Nome, subst: m.Substancia, n: 0, codigos: 0 };
+    if (m.Estado === 'Disponível') g.n++; if (m.NRegisto || m.GTIN) g.codigos++; });
+  const l = Object.values(grupos).sort((a, b) => (a.codigos > 0) - (b.codigos > 0) || a.nome.localeCompare(b.nome, 'pt'));
+  $('assoc-lista').innerHTML = l.length ? l.map(g => `
+    <div class="linha" style="border-top:1px solid #eee;padding:7px 0">
+      <span style="flex:1"><b>${esc(g.nome)}</b> <span class="sub">${esc(g.subst || '')} · ${g.n} caixa(s)${g.codigos ? '' : ' · sem código'}</span></span>
+      <button class="btn sec peq" data-nome="${esc(g.nome)}" onclick="associarCodigo(this.dataset.nome)">É este</button>
+    </div>`).join('') : '<div class="sub">Nenhum medicamento com esse nome.</div>';
+}
+
+async function associarCodigo(nome) {
+  const p = painelAtual; if (!p) return;
+  if (!confirm('Associar este código a "' + nome + '"?')) return;
+  try {
+    const res = await gravar('associarCodigo', { Nome: nome, NRegisto: p.r.nregisto || '', GTIN: p.r.gtin || '' });
+    aviso('✅ Código associado a ' + nome + (res && res.alteradas ? ' (' + res.alteradas + ' caixa(s) atualizada(s))' : ''), 4000);
+    if (modoLeitor === 'usar') {
+      const e = encontrarCaixa(p.r), todas = e.exata ? [e.exata] : e.semSerie.concat(e.outras);
+      if (todas.length === 1) { await fecharLeitor(); irUsar(todas[0].ID); return; }
+    }
+    mostrarPainel(p.txt, p.r);
+  } catch (e) { aviso('⚠️ ' + e.message, 5000); }
 }
 
 async function associar(id) {
