@@ -6,6 +6,11 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Medicamentos da Família</title>
+<link rel="icon" type="image/png" href="icone.png">
+<link rel="apple-touch-icon" href="icone.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a73e8">
+<meta name="apple-mobile-web-app-title" content="Medicamentos">
 <style>
   :root { --azul:#1a73e8; --verde:#188038; --amarelo:#f9ab00; --vermelho:#d93025; --cinza:#5f6368; --fundo:#f6f8fb; }
   * { box-sizing:border-box; }
@@ -42,6 +47,17 @@
   .vazio { text-align:center; color:var(--cinza); padding:30px 10px; }
   .dica { font-size:12px; color:var(--cinza); margin-top:4px; }
   .segredo { -webkit-text-security:disc; }
+  .seg { display:flex; background:#e8eaed; border-radius:10px; padding:3px; margin-bottom:10px; }
+  .seg button { flex:1; border:0; background:none; padding:8px; border-radius:8px; font-size:14px; color:var(--cinza); }
+  .seg button.ativo { background:#fff; color:var(--azul); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.15); }
+  .limpar-wrap { position:relative; flex:1; width:100%; }
+  .limpar-wrap input { padding-right:38px; }
+  .limpar-x { position:absolute; right:4px; top:50%; transform:translateY(-50%); border:0; background:#dadce0; color:#3c4043; width:26px; height:26px; border-radius:50%; font-size:14px; line-height:26px; padding:0; display:none; }
+  .codigo { font-family:ui-monospace,Menlo,monospace; font-weight:700; background:#202124; color:#fff; border-radius:5px; padding:1px 6px; font-size:12px; letter-spacing:.5px; }
+  .tick { display:flex; gap:8px; align-items:center; color:#202124; margin-top:12px; font-size:15px; }
+  .tick input { width:22px; height:22px; }
+  .etiqueta { background:#fff; border:2px dashed #5f6368; border-radius:10px; padding:16px; text-align:center; color:#202124; }
+  .etiqueta .grande { font-family:ui-monospace,Menlo,monospace; font-size:40px; font-weight:800; letter-spacing:2px; }
   header { display:flex; justify-content:space-between; align-items:center; }
   header button { border:0; border-radius:18px; padding:7px 12px; font-size:14px; font-weight:600; background:#fff; color:var(--azul); }
   .resumo div { cursor:pointer; }
@@ -58,6 +74,10 @@
 
   <!-- INVENTÁRIO -->
   <section id="e-inventario" class="ecra ativo">
+    <div class="seg" id="seg-tipo">
+      <button class="ativo" data-t="med" onclick="mudarTipo('med')">💊 Medicamentos</button>
+      <button data-t="homeo" onclick="mudarTipo('homeo')">🌿 Homeopáticos</button>
+    </div>
     <div class="resumo">
       <div onclick="filtrar('Disponível')"><b id="r-total">–</b>disponíveis</div>
       <div onclick="filtrar('aExpirar')"><b id="r-aviso">–</b>a expirar</div>
@@ -66,17 +86,10 @@
     </div>
     <div class="filtros">
       <select id="f-pessoa"></select>
-      <select id="f-estado">
-        <option value="Disponível">Disponíveis</option>
-        <option value="alerta">Expirados + a expirar</option>
-        <option value="expirados">Só expirados</option>
-        <option value="aExpirar">Só a expirar</option>
-        <option value="aAcabar">A acabar</option>
-        <option value="todos">Todos (incl. terminados)</option>
-      </select>
+      <select id="f-estado"><option value="Disponível">Disponíveis</option></select>
     </div>
     <div class="linha" style="margin-bottom:10px;flex-wrap:nowrap">
-      <input id="f-texto" placeholder="🔎 Procurar nome, substância, para quê…">
+      <input id="f-texto" class="limpavel" placeholder="🔎 Nome, substância, código (M0012)…">
       <button class="btn sec" onclick="abrirLeitor('verificar')" title="Verificar caixa">📷</button>
     </div>
     <div id="estado-sync" class="dica" style="margin:-4px 2px 8px"></div>
@@ -119,9 +132,10 @@
       <input id="m-codigo" placeholder="0105600…" onchange="aplicarCodigo(this.value)">
     </div>
     <div class="cartao">
-      <input type="hidden" id="m-ID">
+      <input type="hidden" id="m-ID"><input type="hidden" id="m-Codigo">
+      <div id="f-codigo" class="linha" style="display:none;justify-content:space-between;margin-bottom:4px"><span class="sub">Código desta caixa</span><span class="codigo" id="f-codigo-txt"></span></div>
       <label>Pessoa</label><select id="m-Pessoa"></select>
-      <label>Nome do medicamento *</label><input id="m-Nome" list="dl-nomes" placeholder="ex.: Ben-u-ron">
+      <label>Nome do medicamento *</label><input id="m-Nome" class="limpavel" list="dl-nomes" placeholder="ex.: Ben-u-ron">
       <datalist id="dl-nomes"></datalist>
       <label>Substância ativa</label><input id="m-Substancia" placeholder="ex.: Paracetamol">
       <div class="duas">
@@ -156,12 +170,19 @@
         <div><label>Lote</label><input id="m-Lote"></div>
       </div>
       <input type="hidden" id="m-GTIN">
+      <label class="tick"><input type="checkbox" id="m-Homeopatico"> 🌿 Homeopático</label>
+      <label class="tick"><input type="checkbox" id="m-Receita"> ℞ Obrigatório ter receita</label>
+      <label>🎯 Para que serve</label><input id="m-Indicacoes" placeholder="ex.: febre, dores, dor de garganta">
       <label>💊 Como tomar</label><textarea id="m-ComoTomar" placeholder="ex.: 5 ml de 8 em 8 horas, se febre" style="min-height:48px"></textarea>
       <label>🩺 Receitado por</label><input id="m-ReceitadoPor" list="dl-receitado" placeholder="ex.: Dra. Silva (pediatra)">
       <datalist id="dl-receitado"></datalist>
-      <div class="dica">Estes dois campos passam automaticamente para a próxima caixa do mesmo medicamento (podes editar ou apagar).</div>
+      <div class="dica">Homeopático, receita, para que serve, como tomar e receitado por passam automaticamente para a próxima caixa do mesmo medicamento (podes editar ou apagar).</div>
       <label>Notas (só desta caixa)</label><textarea id="m-Notas" placeholder="ex.: está no carro"></textarea>
       <div class="acoes"><button class="btn" id="b-guardar" onclick="guardarMed()">Guardar</button></div>
+      <div id="bloco-apagar" style="display:none;margin-top:18px;border-top:1px solid #eee;padding-top:12px">
+        <button class="btn perigo peq" onclick="apagarDefinitivo()">🗑️ Apagar registo definitivamente</button>
+        <div class="dica">Só para enganos: apaga a caixa e as utilizações dela do Sheet. Para caixas que deitaste fora, usa antes "🗑️ Fora".</div>
+      </div>
     </div>
   </section>
 
@@ -169,7 +190,7 @@
   <section id="e-usos" class="ecra">
     <div class="cartao">
       <h3>🔎 Para que sintoma?</h3>
-      <input id="s-texto" placeholder="ex.: febre, tosse, dor de ouvido…">
+      <input id="s-texto" class="limpavel" placeholder="ex.: febre, tosse, dor de ouvido…">
       <div id="s-resultado"></div>
       <div class="dica">É só o histórico da família. Não substitui o médico ou o farmacêutico. A dose (sobretudo nas crianças) depende da idade e do peso: confirma sempre no folheto.</div>
     </div>
@@ -208,6 +229,11 @@
       </div>
     </div>
     <div class="cartao">
+      <h3>Inventário</h3>
+      <label class="tick"><input type="checkbox" id="c-antigos" onchange="mudarAntigos()"> Mostrar terminados e deitados fora</label>
+      <div class="dica">Desligado: o Inventário mostra só o que está em casa. Os registos antigos ficam sempre guardados no Sheet.</div>
+    </div>
+    <div class="cartao">
       <h3>Pessoas</h3>
       <div id="lista-pessoas" class="sub"></div>
       <div class="duas">
@@ -230,7 +256,7 @@
 <div id="leitorModal">
   <div class="linha" style="width:100%;max-width:420px;justify-content:space-between;margin-bottom:8px">
     <span id="leitor-titulo" style="color:#fff;font-weight:600">📷 Ler caixa</span>
-    <button class="btn perigo peq" onclick="fecharLeitor()">✕ Desligar</button>
+    <button class="btn perigo peq" id="leitor-fechar" onclick="fecharLeitor()">✕ Desligar</button>
   </div>
   <div id="leitor"></div>
   <p id="leitor-dica" style="color:#ddd;font-size:13px;text-align:center;margin:6px 0">Aponta para o quadradinho (Data Matrix) ou para o código de barras</p>
@@ -310,6 +336,10 @@ const VAZIO = () => ({ pessoas: [], inventario: [], utilizacoes: [], catalogo: [
 let cfg = {};
 try { cfg = JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { cfg = {}; }
 let D = VAZIO();
+const LS_PREF = 'medicamentos_pref_v1';
+let pref = { antigos: false, tipo: 'med' };
+try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(LS_PREF) || '{}')); } catch (e) {}
+const guardarPref = () => { try { localStorage.setItem(LS_PREF, JSON.stringify(pref)); } catch (e) {} };
 
 // configuração rápida por ligação (#url=…&key=…). O "#" nunca é enviado ao servidor.
 (function () {
@@ -334,13 +364,31 @@ async function api(action, data) {
   return j.res;
 }
 
-/** Gravação: o script devolve logo os dados atualizados (um só pedido). */
-async function gravar(action, data) {
-  sync('A guardar…');
-  const r = await api(action, data);
-  aplicarDados(r.dados);
-  return r.resultado;
+/**
+ * Gravação imediata: o ecrã muda logo (função "local") e o pedido ao Google segue em segundo plano, em fila.
+ * Quando a fila esvazia, aplicam-se os dados verdadeiros do Sheet. Se der erro, desfaz e avisa.
+ */
+let fila = Promise.resolve(), pendentes = 0;
+function gravar(action, data, local) {
+  const antes = JSON.stringify(D);
+  if (local) { try { local(D); guardarCache(); desenharTudo(); } catch (e) { console.error(e); } }
+  pendentes++; sync('⏳ A guardar…');
+  const p = fila.then(() => api(action, data)).then(r => {
+    pendentes--;
+    if (!pendentes) aplicarDados(r.dados); else sync('⏳ A guardar… (' + pendentes + ')');
+    return r.resultado;
+  }, e => {
+    pendentes--;
+    D = JSON.parse(antes); guardarCache(); desenharTudo();
+    sync('⚠️ Não guardado'); aviso('⚠️ Não foi guardado: ' + e.message, 6000);
+    throw e;
+  });
+  fila = p.catch(() => {});
+  return p;
 }
+function guardarCache() { try { localStorage.setItem(LS_DADOS, JSON.stringify({ quando: Date.now(), url: cfg.url, D })); } catch (e) {} }
+// sair da app com gravações pendentes
+window.addEventListener('beforeunload', e => { if (pendentes) { e.preventDefault(); e.returnValue = ''; } });
 
 function aplicarDados(novos) {
   D = Object.assign(VAZIO(), novos);
@@ -379,7 +427,9 @@ async function carregar() {
 
 /* ============ NAVEGAÇÃO ============ */
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => mostrar(b.dataset.e));
+function verXs() { document.querySelectorAll('input.limpavel').forEach(el => el._ver && el._ver()); }
 function mostrar(e) {
+  setTimeout(verXs, 0);
   document.querySelectorAll('.ecra').forEach(s => s.classList.toggle('ativo', s.id === 'e-' + e));
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('ativo', b.dataset.e === e));
   window.scrollTo(0, 0);
@@ -432,37 +482,69 @@ function motivosPorMed() {
   return r;
 }
 
+const eHomeo = m => m.Homeopatico === 'Sim' || m.Homeopatico === true;
+const doTipo = m => pref.tipo === 'homeo' ? eHomeo(m) : !eHomeo(m);
+// "12", "m12", "M0012" → nº 12
+const numCodigo = t => { const x = String(t || '').trim().match(/^m?0*(\d+)$/i); return x ? +x[1] : null; };
+function mudarTipo(t) { pref.tipo = t; guardarPref(); document.querySelectorAll('#seg-tipo button').forEach(b => b.classList.toggle('ativo', b.dataset.t === t)); desenharInventario(); }
+function mudarAntigos() {
+  pref.antigos = $('c-antigos').checked; guardarPref();
+  if (!pref.antigos && ['antigos', 'todos'].includes($('f-estado').value)) $('f-estado').value = 'Disponível';
+  desenharInventario();
+}
 function desenharInventario() {
-  const disp = D.inventario.filter(m => m.Estado === 'Disponível');
+  const OPC = [['Disponível', 'Disponíveis'], ['alerta', 'Expirados + a expirar'], ['expirados', 'Só expirados'], ['aExpirar', 'Só a expirar'], ['aAcabar', 'A acabar']]
+    .concat(pref.antigos ? [['antigos', 'Terminados / deitados fora'], ['todos', 'Todos (incl. antigos)']] : []);
+  const vAtual = $('f-estado').value;
+  $('f-estado').innerHTML = OPC.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  $('f-estado').value = OPC.some(o => o[0] === vAtual) ? vAtual : 'Disponível';
+  if ($('f-texto')._ver) $('f-texto')._ver();
+  $('c-antigos').checked = !!pref.antigos;
+  document.querySelectorAll('#seg-tipo button').forEach(b => b.classList.toggle('ativo', b.dataset.t === pref.tipo));
+  const disp = D.inventario.filter(m => m.Estado === 'Disponível' && doTipo(m));
   $('r-total').textContent = disp.length;
   $('r-aviso').textContent = disp.filter(m => estadoValidade(m).cls === 'aviso').length;
   $('r-exp').textContent = disp.filter(m => estadoValidade(m).cls === 'exp').length;
   $('r-acabar').textContent = disp.filter(aAcabar).length;
 
-  const fp = $('f-pessoa').value, fe = $('f-estado').value, ft = norm($('f-texto').value);
+  const fp = $('f-pessoa').value, fe = $('f-estado').value, fRaw = $('f-texto').value.trim(), ft = norm(fRaw);
   const mot = motivosPorMed();
-
+  const nc = numCodigo(fRaw);
+  // pesquisa por código: mostra essa caixa, esteja onde estiver (também as antigas e de outro tipo)
+  if (nc != null) {
+    const porCodigo = D.inventario.filter(m => numCodigo(m.Codigo) === nc);
+    if (porCodigo.length) {
+      $('lista').innerHTML = porCodigo.map(m => cartaoMed(m, mot)).join('');
+      atualizarSelectUso(); return;
+    }
+  }
   let l = D.inventario.filter(m => {
+    if (!doTipo(m)) return false;
+    const disponivel = m.Estado === 'Disponível', cls = estadoValidade(m).cls;
+    if (!pref.antigos && !disponivel) return false;
     if (fp && m.Pessoa !== fp) return false;
-    if (fe === 'Disponível' && m.Estado !== 'Disponível') return false;
-    const cls = estadoValidade(m).cls, disponivel = m.Estado === 'Disponível';
+    if (fe === 'Disponível' && !disponivel) return false;
+    if (fe === 'antigos' && disponivel) return false;
     if (fe === 'alerta' && (!disponivel || !['aviso', 'exp'].includes(cls))) return false;
     if (fe === 'expirados' && (!disponivel || cls !== 'exp')) return false;
     if (fe === 'aExpirar' && (!disponivel || cls !== 'aviso')) return false;
     if (fe === 'aAcabar' && (!disponivel || !aAcabar(m))) return false;
     if (ft) {
-      const txt = norm([m.Nome, m.Substancia, m.Local, m.Notas, m.Pessoa, m.ComoTomar, m.ReceitadoPor, ...(mot[m.ID] || [])].join(' '));
+      const txt = norm([m.Nome, m.Substancia, m.Local, m.Notas, m.Pessoa, m.ComoTomar, m.ReceitadoPor, m.Indicacoes, m.Codigo, ...(mot[m.ID] || [])].join(' '));
       if (!txt.includes(ft)) return false;
     }
     return true;
   }).sort((a, b) => estadoValidade(a).ord - estadoValidade(b).ord);
 
   $('lista').innerHTML = l.length ? l.map(m => cartaoMed(m, mot)).join('')
-    : '<div class="vazio">Nada para mostrar.<br>Usa ➕ para adicionar medicamentos.</div>';
-
+    : `<div class="vazio">Nada para mostrar.<br>${pref.tipo === 'homeo' ? 'Para registar um homeopático, marca "🌿 Homeopático" no ➕ Adicionar.' : 'Usa ➕ para adicionar medicamentos.'}</div>`;
+  atualizarSelectUso();
+}
+function atualizarSelectUso() {
+  const disp = D.inventario.filter(m => m.Estado === 'Disponível');
   const sel = $('u-MedID').value;
   $('u-MedID').innerHTML = disp.slice().sort((a, b) => String(a.Nome).localeCompare(b.Nome, 'pt'))
-    .map(m => `<option value="${esc(m.ID)}">${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''} (${esc(m.Pessoa || '—')})${m.ValidadeReal ? ' · val. ' + fmt(m.ValidadeReal) : ''}</option>`).join('');
+    .map(m => `<option value="${esc(m.ID)}">${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''} (${esc(m.Pessoa || '—')})${m.Codigo ? ' · ' + esc(m.Codigo) : ''}${m.ValidadeReal ? ' · val. ' + fmt(m.ValidadeReal) : ''}</option>`).join('');
   if (sel) $('u-MedID').value = sel;
   infoUso();
 }
@@ -473,11 +555,12 @@ function cartaoMed(m, mot) {
   const qtd = textoQtd(m);
   return `<div class="cartao" id="c-${esc(m.ID)}">
     <div class="linha" style="justify-content:space-between">
-      <h3>${esc(m.Nome)} ${m.Dosagem ? '<span class="sub">' + esc(m.Dosagem) + '</span>' : ''}</h3>
+      <h3>${eHomeo(m) ? '🌿 ' : ''}${esc(m.Nome)} ${m.Dosagem ? '<span class="sub">' + esc(m.Dosagem) + '</span>' : ''}${m.Receita === 'Sim' ? ' <span class="badge neutro" title="Receita obrigatória">℞</span>' : ''}</h3>
       <span>${m.Estado === 'Disponível' ? `<span class="badge ${ev.cls}">${ev.txt}</span>` : `<span class="badge neutro">${esc(m.Estado)}</span>`}
       ${m.Estado === 'Disponível' && aAcabar(m) ? '<span class="badge aviso">A acabar</span>' : ''}</span>
     </div>
-    <div class="sub">${esc(m.Substancia || '—')}${m.Forma ? ' · ' + esc(m.Forma) : ''}</div>
+    <div class="sub">${m.Codigo ? '<span class="codigo">' + esc(m.Codigo) + '</span> ' : ''}${esc(m.Substancia || '—')}${m.Forma ? ' · ' + esc(m.Forma) : ''}</div>
+    ${m.Indicacoes ? `<div class="sub">🎯 ${esc(m.Indicacoes)}</div>` : ''}
     <div class="sub">👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}</div>
     <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || '—'}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
     ${qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
@@ -573,12 +656,12 @@ function editarRegular(nome) {
 async function guardarRegular() {
   const d = { Nome: $('g-Nome').value.trim(), Procura: $('g-Procura').value.trim(), Minimo: $('g-Minimo').value || 1 };
   if (!d.Nome) { aviso('Falta o nome'); return; }
-  try { await gravar('guardarRegular', d); $('g-Nome').value = ''; $('g-Procura').value = ''; $('g-Minimo').value = 1; aviso('✅ Regular guardado'); }
-  catch (e) { aviso('⚠️ ' + e.message, 5000); }
+  gravar('guardarRegular', d, D => { D.regulares = (D.regulares || []).filter(r => norm(r.Nome) !== norm(d.Nome)).concat([{ Nome: d.Nome, Procura: d.Procura, Minimo: Number(d.Minimo) || 1 }]); }).catch(() => {});
+  $('g-Nome').value = ''; $('g-Procura').value = ''; $('g-Minimo').value = 1; aviso('✅ Regular guardado');
 }
 async function apagarRegular(nome) {
   if (!confirm('Tirar "' + nome + '" dos regulares?')) return;
-  try { await gravar('guardarRegular', { Nome: nome, apagar: true }); } catch (e) { aviso('⚠️ ' + e.message, 5000); }
+  gravar('guardarRegular', { Nome: nome, apagar: true }, D => { D.regulares = (D.regulares || []).filter(r => r.Nome !== nome); }).catch(() => {});
 }
 
 /* ============ PESQUISA POR SINTOMA ============ */
@@ -594,13 +677,17 @@ function pesquisarSintoma() {
     const g = grupos[m.ID] = grupos[m.ID] || { m, n: 0, ultima: '', pessoas: new Set() };
     g.n++; g.pessoas.add(u.Pessoa); if (String(u.Data) > g.ultima) g.ultima = String(u.Data);
   });
-  const lista = Object.values(grupos).sort((a, b) => b.n - a.n);
+  // também os indicados para isto ("para que serve"), mesmo que nunca usados
+  D.inventario.forEach(m => { if (m.Estado === 'Disponível' && norm(m.Indicacoes).includes(t) && !grupos[m.ID]) grupos[m.ID] = { m, n: 0, ultima: '', pessoas: new Set(), indicado: true }; });
+  const lista = Object.values(grupos).sort((a, b) => b.n - a.n || estadoValidade(a.m).ord - estadoValidade(b.m).ord);
   let html = '';
   if (lista.length) {
-    html += '<div class="sub" style="margin:10px 0 4px"><b>Em casa, já usados para isto:</b></div>';
+    html += '<div class="sub" style="margin:10px 0 4px"><b>Em casa, para isto:</b></div>';
     html += lista.map(g => { const ev = estadoValidade(g.m); return `<div class="cartao" style="background:#f8fafd">
       <div class="linha" style="justify-content:space-between"><b>${esc(g.m.Nome)} ${esc(g.m.Dosagem || '')}</b><span class="badge ${ev.cls}">${ev.txt}</span></div>
-      <div class="sub">${esc(g.m.Substancia || '')} · ${g.n}× · última vez ${fmt(g.ultima)} · ${esc([...g.pessoas].join(', '))}</div>
+      <div class="sub">${esc(g.m.Substancia || '')}${g.n ? ` · usado ${g.n}× · última vez ${fmt(g.ultima)} · ${esc([...g.pessoas].join(', '))}` : ' · ainda não usado'}</div>
+      ${g.m.Indicacoes ? `<div class="sub">🎯 ${esc(g.m.Indicacoes)}</div>` : ''}
+      ${g.m.ComoTomar ? `<div class="sub" style="color:#202124">💊 ${esc(g.m.ComoTomar)}</div>` : ''}
       ${textoQtd(g.m) ? `<div class="sub">📦 Resta: ${textoQtd(g.m)}${g.m.Local ? ' · 📍 ' + esc(g.m.Local) : ''}</div>` : (g.m.Local ? `<div class="sub">📍 ${esc(g.m.Local)}</div>` : '')}
       <div class="acoes"><button class="btn sec peq" onclick="irUsar('${esc(g.m.ID)}')">📝 Usar</button></div></div>`; }).join('');
   } else if (usos.length) {
@@ -616,16 +703,22 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const CAMPOS = ['ID', 'Codigo', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const TICKS = ['Homeopatico', 'Receita'];
+const lerCampo = c => TICKS.includes(c) ? ($('m-' + c).checked ? 'Sim' : '') : $('m-' + c).value.trim();
+const porCampo = (c, v) => { if (TICKS.includes(c)) $('m-' + c).checked = v === 'Sim' || v === true; else $('m-' + c).value = v == null ? '' : v; };
 function limparForm() {
-  CAMPOS.forEach(c => $('m-' + c).value = ''); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
-  $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none';
+  CAMPOS.forEach(c => porCampo(c, '')); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
+  if (pref.tipo === 'homeo') $('m-Homeopatico').checked = true;
+  $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none'; $('bloco-apagar').style.display = 'none'; $('f-codigo').style.display = 'none';
 }
 function editar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
-  limparForm(); CAMPOS.forEach(c => $('m-' + c).value = m[c] == null ? '' : m[c]);
+  if (String(id).startsWith('tmp')) { aviso('⏳ Ainda a guardar esta caixa… tenta daqui a uns segundos.'); return; }
+  limparForm(); CAMPOS.forEach(c => porCampo(c, m[c]));
   if (!$('m-UnidadePrazo').value) $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
-  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; mostrar('adicionar');
+  if (m.Codigo) { $('f-codigo-txt').textContent = m.Codigo; $('f-codigo').style.display = 'flex'; }
+  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; $('bloco-apagar').style.display = 'block'; mostrar('adicionar');
 }
 /* --- validade por mês/ano (como vem na caixa); guarda o último dia do mês --- */
 (function () {
@@ -648,9 +741,9 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'ComoTomar', 'ReceitadoPor'];
+const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
 // "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
-const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor'];
+const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor', 'Indicacoes'];
 function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
 function modeloPorNome(nome) {
   const n = norm(nome); if (!n) return null;
@@ -665,6 +758,7 @@ function preencherVazios(mod, campos) {
   let n = 0;
   (campos || DADOS_PRODUTO).forEach(c => {
     if (mod[c] === '' || mod[c] == null) return;
+    if (TICKS.includes(c)) { if (mod[c] === 'Sim' && !$('m-' + c).checked) { $('m-' + c).checked = true; n++; } return; }
     const el = $('m-' + c);
     if (el.value === '' || (c === 'UnidadePrazo' && !$('m-DiasAposAbertura').value)) { el.value = mod[c]; n++; }
   });
@@ -678,7 +772,8 @@ $('m-Nome').addEventListener('change', () => {
 function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
-  ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local', 'ComoTomar', 'ReceitadoPor'].forEach(c => { if (m[c] != null && m[c] !== '') $('m-' + c).value = m[c]; });
+  ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local',
+   'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
 
@@ -741,27 +836,85 @@ function aplicarCodigo(txt) {
   preencherNova(txt, r);
 }
 
-async function guardarMed() {
-  const d = {}; CAMPOS.forEach(c => d[c] = $('m-' + c).value.trim());
+/** validade real = a mais cedo entre a validade da caixa e abertura + prazo (igual ao script) */
+function calcValidadeReal(m) {
+  const c = [];
+  if (m.Validade) c.push(String(m.Validade));
+  const n = Number(m.DiasAposAbertura);
+  if (m.DataAbertura && n > 0) {
+    const [y, mo, d] = String(m.DataAbertura).split('-').map(Number), dt = new Date(y, mo - 1, d);
+    if (m.UnidadePrazo === 'meses') { dt.setDate(1); dt.setMonth(dt.getMonth() + n); dt.setDate(Math.min(d, new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate())); }
+    else dt.setDate(dt.getDate() + n * (m.UnidadePrazo === 'semanas' ? 7 : 1));
+    c.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`);
+  }
+  return c.length ? c.sort()[0] : '';
+}
+function alterarLocal(id, mud) {
+  return D => { const m = D.inventario.find(x => x.ID === id); if (!m) return; Object.assign(m, mud); m.ValidadeReal = calcValidadeReal(m); m.AtualizadoEm = hojeISO(); };
+}
+function guardarMed() {
+  const d = {}; CAMPOS.forEach(c => d[c] = lerCampo(c));
   if (!d.Nome) { aviso('Falta o nome do medicamento'); return; }
-  if (!d.ID) { delete d.ID; delete d.Restante; }
-  $('b-guardar').disabled = true;
-  try { await gravar('guardarMed', d); aviso('✅ Guardado'); limparForm(); mostrar('inventario'); }
-  catch (e) { aviso('⚠️ ' + e.message, 5000); sync(''); }
-  finally { $('b-guardar').disabled = false; }
+  delete d.Codigo;
+  const novo = !d.ID;
+  if (novo) { delete d.ID; delete d.Restante; }
+  const local = novo
+    ? (D => { const m = Object.assign({ ID: 'tmp' + Date.now(), Estado: 'Disponível', CriadoEm: hojeISO(), Codigo: '' }, d);
+              if (temNum(m.Quantidade)) m.Restante = m.Quantidade; m.ValidadeReal = calcValidadeReal(m); D.inventario.push(m); })
+    : alterarLocal(d.ID, d);
+  aviso('✅ Guardado'); limparForm(); mostrar('inventario');
+  gravar('guardarMed', d, local).then(r => {
+    const m = r && D.inventario.find(x => x.ID === r.ID);
+    if (novo && m && m.Codigo) aviso('✅ Guardado · código ' + m.Codigo, 3500);
+  }).catch(() => {   // devolve o que estava escrito ao formulário
+    limparForm(); CAMPOS.forEach(c => { if (d[c] != null) porCampo(c, d[c]); }); mostrarValidade();
+    if (!novo) { $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; }
+    mostrar('adicionar');
+  });
 }
 async function estado(id, est) {
+  if (String(id).startsWith('tmp')) { aviso('⏳ Ainda a guardar esta caixa… tenta daqui a uns segundos.'); return false; }
   if (est !== 'Disponível' && !confirm(est === 'Terminado' ? 'Marcar como terminado?' : 'Marcar como deitado fora?')) return false;
-  try { await gravar('mudarEstado', { ID: id, Estado: est }); return true; } catch (e) { aviso('⚠️ ' + e.message, 5000); return false; }
+  gravar('mudarEstado', { ID: id, Estado: est }, alterarLocal(id, { Estado: est })).catch(() => {});
+  if (est !== 'Disponível') aviso(est === 'Terminado' ? '✅ Terminado' : '🗑️ Deitado fora');
+  return true;
+}
+async function apagarDefinitivo() {
+  const id = $('m-ID').value, m = D.inventario.find(x => x.ID === id); if (!m) return;
+  const nUsos = D.utilizacoes.filter(u => u.MedID === id).length;
+  if (!confirm(`Apagar DEFINITIVAMENTE "${m.Nome}"${m.Codigo ? ' (' + m.Codigo + ')' : ''}${nUsos ? ' e ' + nUsos + ' utilização(ões)' : ''}?\n\nNão dá para desfazer.`)) return;
+  limparForm(); mostrar('inventario'); aviso('🗑️ Registo apagado');
+  gravar('apagarMed', { ID: id }, D => { D.inventario = D.inventario.filter(x => x.ID !== id); D.utilizacoes = D.utilizacoes.filter(u => u.MedID !== id); }).catch(() => {});
 }
 async function abrirMed(id) {
   const m = D.inventario.find(x => x.ID === id);
+  if (String(id).startsWith('tmp')) { aviso('⏳ Ainda a guardar esta caixa… tenta daqui a uns segundos.'); return false; }
   const t = prompt('Abriste hoje. Quanto tempo dura depois de aberto?\nEx.: "28 dias", "4 semanas", "3 meses" (vê o folheto; vazio se não souberes)', textoPrazo(m));
   if (t === null) return false;
   const p = lerPrazo(t); if (!p) { aviso('Não percebi o prazo. Ex.: 3 meses'); return false; }
-  try { await gravar('abrir', { ID: id, DataAbertura: hojeISO(), DiasAposAbertura: p.n, UnidadePrazo: p.unidade }); aviso('✅ Data de abertura registada'); return true; }
-  catch (e) { aviso('⚠️ ' + e.message, 5000); return false; }
+  const mud = { DataAbertura: hojeISO(), DiasAposAbertura: p.n, UnidadePrazo: p.unidade };
+  gravar('abrir', Object.assign({ ID: id }, mud), alterarLocal(id, mud)).catch(() => fecharEtiqueta());
+  mostrarEtiqueta(id);
+  return true;
 }
+/** Mostra o que escrever na embalagem: código, data de abertura e validade real */
+function mostrarEtiqueta(id) {
+  const m = D.inventario.find(x => x.ID === id); if (!m) return;
+  pararCamara();
+  $('leitor-titulo').textContent = '🏷️ Escreve na embalagem'; $('leitor-fechar').textContent = '✕ Fechar'; $('leitor-dica').textContent = ''; $('leitor').style.display = 'none';
+  $('leitorModal').style.display = 'flex'; painelAtual = null;
+  $('leitor-res').innerHTML = `<div class="etiqueta">
+      <div class="grande">${esc(m.Codigo || '—')}</div>
+      <div style="margin-top:6px;font-size:15px">${esc(m.Nome)} ${esc(m.Dosagem || '')}</div>
+      <div style="margin-top:10px;font-size:18px">Aberto: <b>${fmt(m.DataAbertura) || '—'}</b></div>
+      <div style="font-size:18px">Validade: <b>${fmt(m.ValidadeReal) || '—'}</b></div>
+      ${textoPrazo(m) ? `<div class="sub">dura ${esc(textoPrazo(m))} depois de aberto</div>` : ''}
+    </div>
+    ${m.Codigo ? '' : '<div class="dica" style="color:#ddd">O código aparece quando a caixa acabar de ser guardada.</div>'}
+    <div class="dica" style="color:#ddd;text-align:center">Para encontrar esta caixa mais tarde, escreve o código na pesquisa do Inventário.</div>
+    <div class="acoes" style="justify-content:center"><button class="btn" onclick="fecharEtiqueta()">OK</button></div>`;
+}
+function fecharEtiqueta() { fecharLeitor(); }
 
 /* ============ USOS ============ */
 function irUsar(id) { mostrar('usos'); $('u-MedID').value = id; $('u-Data').value = hojeISO(); $('u-Quantidade').value = '1'; infoUso(); $('u-Motivo').focus(); }
@@ -778,12 +931,20 @@ async function registarUso() {
   const d = { MedID: $('u-MedID').value, Pessoa: $('u-Pessoa').value, Data: $('u-Data').value || hojeISO(), Motivo: $('u-Motivo').value.trim(),
               Notas: $('u-Notas').value.trim(), Quantidade: $('u-Quantidade').value.trim(), marcarAberto: $('u-abrir').checked };
   if (!d.MedID) { aviso('Escolhe o medicamento'); return; }
-  try {
-    const r = await gravar('registarUso', d);
-    $('u-Motivo').value = ''; $('u-Notas').value = ''; $('u-Quantidade').value = '1';
-    if (r && r.restante === 0 && confirm('A embalagem acabou. Marcar como terminada?')) await gravar('mudarEstado', { ID: d.MedID, Estado: 'Terminado' });
-    else aviso('✅ Registado' + (r && temNum(r.restante) ? ' · restam ' + r.restante : ''));
-  } catch (e) { aviso('⚠️ ' + e.message, 5000); }
+  const m = D.inventario.find(x => x.ID === d.MedID);
+  let resta = m ? restante(m) : null;
+  if (resta != null && temNum(d.Quantidade)) resta = Math.max(0, Math.round((resta - Number(d.Quantidade)) * 100) / 100);
+  const abriu = d.marcarAberto && m && !m.DataAbertura;
+  gravar('registarUso', d, D => {
+    D.utilizacoes.push({ Data: d.Data, Pessoa: d.Pessoa, MedID: d.MedID, Medicamento: m ? m.Nome : '', Motivo: d.Motivo, Notas: d.Notas, Quantidade: d.Quantidade });
+    const mud = {}; if (resta != null && temNum(d.Quantidade)) mud.Restante = resta; if (abriu) mud.DataAbertura = d.Data;
+    alterarLocal(d.MedID, mud)(D);
+  }).catch(() => {});
+  $('u-Motivo').value = ''; $('u-Notas').value = ''; $('u-Quantidade').value = '1';
+  if (abriu) mostrarEtiqueta(d.MedID);
+  if (resta === 0 && confirm('A embalagem acabou. Marcar como terminada?')) {
+    gravar('mudarEstado', { ID: d.MedID, Estado: 'Terminado' }, alterarLocal(d.MedID, { Estado: 'Terminado' })).catch(() => {});
+  } else aviso('✅ Registado' + (resta != null ? ' · restam ' + resta : ''));
 }
 
 /* ============ DEFINIÇÕES ============ */
@@ -803,8 +964,8 @@ function esquecerConfig() {
 async function guardarPessoa() {
   const d = { Nome: $('p-Nome').value.trim(), Notas: $('p-Notas').value.trim() };
   if (!d.Nome) { aviso('Falta o nome'); return; }
-  try { await gravar('guardarPessoa', d); $('p-Nome').value = ''; $('p-Notas').value = ''; aviso('✅ Guardado'); }
-  catch (e) { aviso('⚠️ ' + e.message, 5000); }
+  gravar('guardarPessoa', d, D => { const p = D.pessoas.find(x => norm(x.Nome) === norm(d.Nome)); if (p) p.Notas = d.Notas; else D.pessoas.push(d); }).catch(() => {});
+  $('p-Nome').value = ''; $('p-Notas').value = ''; aviso('✅ Guardado');
 }
 
 /* ============ LEITOR DE CÓDIGOS (carregado só quando é preciso) ============ */
@@ -821,7 +982,7 @@ function carregarLib() {
 const TITULOS = { verificar: '🔍 Verificar caixas', adicionar: '➕ Ler caixa nova', usar: '📝 Ler caixa a usar' };
 // modos: 'verificar' (contínuo: lê caixa atrás de caixa), 'adicionar', 'usar'
 async function abrirLeitor(modo) {
-  modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 };
+  modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 }; $('leitor-fechar').textContent = '✕ Desligar';
   $('leitor-titulo').textContent = TITULOS[modo] || '📷 Ler caixa';
   $('leitor-dica').textContent = modo === 'verificar' ? 'Lê as caixas uma a uma (quadradinho ou código de barras). A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) ou para o código de barras';
   $('leitor-res').innerHTML = ''; $('leitor').style.display = 'block';
@@ -864,7 +1025,7 @@ async function tratarLeitura(txt) {
 }
 // abre o painel sem câmara (ex.: código colado à mão)
 function abrirPainel(txt, r, modo) {
-  modoLeitor = modo; $('leitor-titulo').textContent = TITULOS[modo] || '📷 Caixa';
+  modoLeitor = modo; $('leitor-fechar').textContent = '✕ Fechar'; $('leitor-titulo').textContent = TITULOS[modo] || '📷 Caixa';
   $('leitor-dica').textContent = ''; $('leitor').style.display = 'none';
   $('leitorModal').style.display = 'flex'; mostrarPainel(txt, r);
 }
@@ -879,7 +1040,7 @@ function mostrarPainel(txt, r, idEscolhido) {
   if (e.exata) {
     const m = e.exata, ev = estadoValidade(m);
     const titulo = m.Estado !== 'Disponível' ? m.Estado : ev.cls === 'exp' ? '❌ EXPIRADO' : ev.cls === 'aviso' ? '⚠️ ' + ev.txt : '✅ Dentro da validade';
-    html += `<div class="banner ${m.Estado !== 'Disponível' ? 'neutro' : ev.cls}">${titulo}<small>${esc(m.Nome)} ${esc(m.Dosagem || '')} · válido até ${fmt(m.ValidadeReal) || '—'}</small></div>`;
+    html += `<div class="banner ${m.Estado !== 'Disponível' ? 'neutro' : ev.cls}">${titulo}<small>${esc(m.Nome)} ${esc(m.Dosagem || '')} · válido até ${fmt(m.ValidadeReal) || '—'}${m.Codigo ? ' · ' + esc(m.Codigo) : ''}</small></div>`;
     if (modoLeitor === 'adicionar') html += '<div class="cartao"><b>Esta caixa já está registada.</b> Não é preciso adicioná-la outra vez.</div>';
     html += `<div class="cartao">
       <div class="sub">${esc(m.Substancia || '—')}${m.Forma ? ' · ' + esc(m.Forma) : ''}</div>
@@ -993,6 +1154,17 @@ async function painelAcao(acao, id) {
 document.querySelectorAll('input, textarea').forEach(el => {
   if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
   el.setAttribute('data-lpignore', 'true'); el.setAttribute('data-1p-ignore', ''); el.setAttribute('data-form-type', 'other');
+});
+// botão ✕ para limpar campos de escrita
+document.querySelectorAll('input.limpavel').forEach(el => {
+  const w = document.createElement('div'); w.className = 'limpar-wrap';
+  el.parentNode.insertBefore(w, el); w.appendChild(el);
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'limpar-x'; b.textContent = '✕'; b.setAttribute('aria-label', 'Limpar');
+  w.appendChild(b);
+  const ver = () => b.style.display = el.value ? 'block' : 'none';
+  el.addEventListener('input', ver); el.addEventListener('change', ver);
+  b.onclick = () => { el.value = ''; ver(); el.dispatchEvent(new Event('input')); el.focus(); };
+  el._ver = ver;
 });
 mostrarValidade();
 carregar();

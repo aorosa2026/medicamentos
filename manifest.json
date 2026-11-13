@@ -1,0 +1,14 @@
+{
+  "name": "Medicamentos da Família",
+  "short_name": "Medicamentos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#1a73e8",
+  "lang": "pt-PT",
+  "icons": [
+    { "src": "icone.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icone.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
