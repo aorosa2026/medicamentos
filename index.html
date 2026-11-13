@@ -83,6 +83,30 @@
     <div id="lista"></div>
   </section>
 
+  <!-- STOCK E COMPRAS -->
+  <section id="e-stock" class="ecra">
+    <div class="cartao">
+      <h3>🛒 Comprar</h3>
+      <div class="dica" style="margin-top:0">Regulares em falta e caixas a acabar sem reserva. Caixas que expiram nos próximos 7 dias já não contam.</div>
+      <div id="compras"></div>
+    </div>
+    <div class="cartao">
+      <h3>⭐ Regulares (ter sempre em casa)</h3>
+      <div id="lista-regulares"></div>
+      <label>Nome</label><input id="g-Nome" placeholder="ex.: Paracetamol, Anti-histamínico, Arnica">
+      <label>Procurar por (opcional)</label><input id="g-Procura" placeholder="ex.: cetirizina, desloratadina, bilastina">
+      <div class="dica">Por defeito procura o nome na substância ativa e no nome das caixas: "Paracetamol" conta Ben-u-ron, genéricos… Para grupos (anti-histamínico) escreve as substâncias separadas por vírgulas.</div>
+      <div class="duas">
+        <div><label>Mínimo de caixas</label><input type="number" min="1" id="g-Minimo" value="1"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn sec" style="width:100%" onclick="guardarRegular()">Guardar</button></div>
+      </div>
+    </div>
+    <div class="cartao">
+      <h3>📦 Stock por medicamento</h3>
+      <div id="stock"></div>
+    </div>
+  </section>
+
   <!-- ADICIONAR / EDITAR -->
   <section id="e-adicionar" class="ecra">
     <div class="cartao">
@@ -151,7 +175,7 @@
       </div>
       <label>Medicamento</label><select id="u-MedID"></select>
       <div id="u-info" class="dica"></div>
-      <label id="u-qtd-label">Quantidade tomada</label><input type="number" min="0" step="any" id="u-Quantidade" placeholder="ex.: 1">
+      <label id="u-qtd-label">Quantidade tomada</label><input type="number" min="0" step="any" id="u-Quantidade" value="1">
       <div class="duas">
         <div><label>Quem tomou</label><select id="u-Pessoa"></select></div>
         <div><label>Data</label><input type="date" id="u-Data"></div>
@@ -192,6 +216,7 @@
 
 <nav>
   <button class="ativo" data-e="inventario"><span>📦</span>Inventário</button>
+  <button data-e="stock"><span>🛒</span>Stock</button>
   <button data-e="adicionar"><span>➕</span>Adicionar</button>
   <button data-e="usos"><span>📝</span>Usos</button>
   <button data-e="def"><span>⚙️</span>Definições</button>
@@ -276,7 +301,7 @@ function lerGS1(texto) {
 /* ============ ESTADO E LIGAÇÃO ============ */
 const LS = 'medicamentos_cfg_v1';
 const LS_DADOS = 'medicamentos_dados_v2';
-const VAZIO = () => ({ pessoas: [], inventario: [], utilizacoes: [], catalogo: [], config: { diasAlerta: 30 } });
+const VAZIO = () => ({ pessoas: [], inventario: [], utilizacoes: [], catalogo: [], regulares: [], config: { diasAlerta: 30 } });
 let cfg = {};
 try { cfg = JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { cfg = {}; }
 let D = VAZIO();
@@ -313,7 +338,7 @@ async function gravar(action, data) {
 }
 
 function aplicarDados(novos) {
-  D = novos;
+  D = Object.assign(VAZIO(), novos);
   try { localStorage.setItem(LS_DADOS, JSON.stringify({ quando: Date.now(), url: cfg.url, D })); } catch (e) {}
   desenharTudo();
   sync('Atualizado às ' + new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }));
@@ -366,12 +391,15 @@ function estadoValidade(m) {
   if (dias <= (D.config.diasAlerta || 30)) return { cls: 'aviso', txt: dias === 0 ? 'Expira hoje' : `Expira em ${dias} d`, ord, dias };
   return { cls: 'ok', txt: 'OK', ord, dias };
 }
+// caixa com quantidade mas sem "resta" registado = cheia
+const restante = m => temNum(m.Restante) ? Number(m.Restante) : temNum(m.Quantidade) ? Number(m.Quantidade) : null;
 function aAcabar(m) {
-  return temNum(m.Restante) && temNum(m.Quantidade) && Number(m.Quantidade) > 0 && Number(m.Restante) <= Number(m.Quantidade) * 0.2;
+  const r = restante(m), q = Number(m.Quantidade);
+  return r != null && q > 0 && r <= q * 0.2;
 }
 function textoQtd(m) {
-  if (!temNum(m.Restante)) return '';
-  return `${Number(m.Restante)}${temNum(m.Quantidade) ? ' de ' + Number(m.Quantidade) : ''} ${esc(m.Unidade || '')}`.trim();
+  const r = restante(m); if (r == null) return '';
+  return `${r}${temNum(m.Quantidade) ? ' de ' + Number(m.Quantidade) : ''} ${esc(m.Unidade || '')}`.trim();
 }
 
 /* ============ DESENHAR ============ */
@@ -389,7 +417,7 @@ function desenharTudo() {
   $('lista-pessoas').innerHTML = D.pessoas.length
     ? D.pessoas.map(p => `• <b>${esc(p.Nome)}</b>${p.Notas ? ' — ' + esc(p.Notas) : ''}`).join('<br>')
     : 'Ainda não há pessoas. Adiciona em baixo.';
-  desenharInventario(); desenharUsos(); pesquisarSintoma();
+  desenharInventario(); desenharUsos(); pesquisarSintoma(); desenharStock();
 }
 
 function motivosPorMed() {
@@ -470,6 +498,78 @@ function linhasUsos(l) {
     return `<div class="cartao">
       <b>${esc(m.Nome || u.Medicamento)}</b> <span class="sub">· ${fmt(u.Data)}</span>
       <div class="sub">👤 ${esc(u.Pessoa)} · ${esc(u.Motivo || '—')}${temNum(u.Quantidade) ? ' · ' + Number(u.Quantidade) + ' ' + esc(m.Unidade || '') : ''}${u.Notas ? ' · ' + esc(u.Notas) : ''}</div></div>`; }).join('');
+}
+
+/* ============ STOCK, REGULARES E COMPRAS (mesma lógica do email) ============ */
+const termosRegular = r => String(r.Procura || r.Nome).split(/[,;\/]/).map(norm).filter(Boolean);
+const cobre = (r, m) => { const t = norm(m.Nome) + ' ' + norm(m.Substancia); return termosRegular(r).some(x => t.includes(x)); };
+function valida(m, ateISO) {
+  if (m.Estado !== 'Disponível') return false;
+  const r = restante(m); if (r != null && r <= 0) return false;
+  return !m.ValidadeReal || String(m.ValidadeReal) > ateISO;
+}
+const daquiA = dias => { const d = new Date(); d.setDate(d.getDate() + dias); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+function listaCompras() {
+  const inv = D.inventario, ate = daquiA(7), out = [];
+  (D.regulares || []).forEach(r => {
+    const deste = inv.filter(m => cobre(r, m) && m.Estado === 'Disponível');
+    const n = deste.filter(m => valida(m, ate) && !aAcabar(m)).length, min = Number(r.Minimo) || 1;
+    if (n >= min) return;
+    const acabar = deste.filter(m => valida(m, ate) && aAcabar(m)).length;
+    const expira = deste.filter(m => !valida(m, ate) && restante(m) !== 0).length;
+    out.push({ nome: r.Nome, regular: r, motivo: n > 0 ? `só ${n} de ${min} caixa(s)` : acabar ? 'só resta uma caixa quase vazia' : expira ? 'as caixas que há estão fora de prazo ou expiram esta semana' : 'não há nenhuma em casa' });
+  });
+  inv.filter(m => valida(m, ate) && aAcabar(m)).forEach(m => {
+    const reserva = inv.some(x => x !== m && valida(x, ate) && !aAcabar(x) && norm(x.Nome) === norm(m.Nome));
+    if (reserva || out.some(o => o.regular && cobre(o.regular, m)) || out.some(o => norm(o.nome) === norm(m.Nome))) return;
+    out.push({ nome: m.Nome, motivo: `está a acabar (resta ${textoQtd(m)})` });
+  });
+  return out;
+}
+function desenharStock() {
+  const compras = listaCompras();
+  $('compras').innerHTML = compras.length
+    ? compras.map(c => `<div style="border-top:1px solid #eee;padding:7px 0"><b>${esc(c.nome)}</b> <span class="sub">— ${esc(c.motivo)}</span></div>`).join('')
+    : '<div class="sub" style="padding:8px 0">✅ Nada a comprar.</div>';
+  const hoje = hojeISO();
+  $('lista-regulares').innerHTML = (D.regulares || []).length ? D.regulares.map(r => {
+    const n = D.inventario.filter(m => valida(m, daquiA(7)) && !aAcabar(m) && cobre(r, m)).length, min = Number(r.Minimo) || 1;
+    return `<div class="linha" style="border-top:1px solid #eee;padding:7px 0">
+      <span class="badge ${n >= min ? 'ok' : 'exp'}">${n}/${min}</span>
+      <span style="flex:1"><b>${esc(r.Nome)}</b>${r.Procura ? ' <span class="sub">(' + esc(r.Procura) + ')</span>' : ''}</span>
+      <button class="btn sec peq" data-n="${esc(r.Nome)}" onclick="editarRegular(this.dataset.n)">✏️</button>
+      <button class="btn perigo peq" data-n="${esc(r.Nome)}" onclick="apagarRegular(this.dataset.n)">✕</button></div>`; }).join('')
+    : '<div class="sub">Ainda não há regulares. Adiciona em baixo (ex.: Paracetamol, Ibuprofeno…).</div>';
+  // stock agrupado por nome
+  const g = {};
+  D.inventario.filter(m => m.Estado === 'Disponível').forEach(m => {
+    const k = norm(m.Nome); const x = g[k] = g[k] || { nome: m.Nome, subst: m.Substancia, caixas: 0, validas: 0, total: 0, temQtd: false, unidade: m.Unidade, prox: '' };
+    x.caixas++; if (valida(m, hoje)) { x.validas++; const r = restante(m); if (r != null) { x.total += r; x.temQtd = true; }
+      if (m.ValidadeReal && (!x.prox || m.ValidadeReal < x.prox)) x.prox = m.ValidadeReal; }
+    if (!x.unidade && m.Unidade) x.unidade = m.Unidade;
+  });
+  const l = Object.values(g).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  $('stock').innerHTML = l.length ? l.map(x => `<div style="border-top:1px solid #eee;padding:7px 0">
+      <div class="linha" style="justify-content:space-between"><b>${esc(x.nome)}</b>
+      <span class="badge ${x.validas ? 'ok' : 'exp'}">${x.validas} caixa(s)${x.caixas > x.validas ? ' + ' + (x.caixas - x.validas) + ' expirada(s)' : ''}</span></div>
+      <div class="sub">${[esc(x.subst || ''), x.temQtd ? 'total ' + Math.round(x.total * 100) / 100 + ' ' + esc(x.unidade || '') : '', x.prox ? 'próxima validade ' + fmt(x.prox) : ''].filter(Boolean).join(' · ')}</div>
+      <button class="btn sec peq" style="margin-top:4px" data-n="${esc(x.nome)}" onclick="verCaixas(this.dataset.n)">Ver caixas</button></div>`).join('')
+    : '<div class="sub">Sem medicamentos disponíveis.</div>';
+}
+function verCaixas(nome) { mostrar('inventario'); $('f-estado').value = 'Disponível'; $('f-pessoa').value = ''; $('f-texto').value = nome; desenharInventario(); }
+function editarRegular(nome) {
+  const r = D.regulares.find(x => x.Nome === nome); if (!r) return;
+  $('g-Nome').value = r.Nome; $('g-Procura').value = r.Procura || ''; $('g-Minimo').value = r.Minimo || 1; $('g-Nome').scrollIntoView({ block: 'center' });
+}
+async function guardarRegular() {
+  const d = { Nome: $('g-Nome').value.trim(), Procura: $('g-Procura').value.trim(), Minimo: $('g-Minimo').value || 1 };
+  if (!d.Nome) { aviso('Falta o nome'); return; }
+  try { await gravar('guardarRegular', d); $('g-Nome').value = ''; $('g-Procura').value = ''; $('g-Minimo').value = 1; aviso('✅ Regular guardado'); }
+  catch (e) { aviso('⚠️ ' + e.message, 5000); }
+}
+async function apagarRegular(nome) {
+  if (!confirm('Tirar "' + nome + '" dos regulares?')) return;
+  try { await gravar('guardarRegular', { Nome: nome, apagar: true }); } catch (e) { aviso('⚠️ ' + e.message, 5000); }
 }
 
 /* ============ PESQUISA POR SINTOMA ============ */
@@ -650,7 +750,7 @@ async function abrirMed(id) {
 }
 
 /* ============ USOS ============ */
-function irUsar(id) { mostrar('usos'); $('u-MedID').value = id; $('u-Data').value = hojeISO(); infoUso(); $('u-Motivo').focus(); }
+function irUsar(id) { mostrar('usos'); $('u-MedID').value = id; $('u-Data').value = hojeISO(); $('u-Quantidade').value = '1'; infoUso(); $('u-Motivo').focus(); }
 function infoUso() {
   const m = D.inventario.find(x => x.ID === $('u-MedID').value);
   $('u-abrir').checked = false;
@@ -665,7 +765,7 @@ async function registarUso() {
   if (!d.MedID) { aviso('Escolhe o medicamento'); return; }
   try {
     const r = await gravar('registarUso', d);
-    $('u-Motivo').value = ''; $('u-Notas').value = ''; $('u-Quantidade').value = '';
+    $('u-Motivo').value = ''; $('u-Notas').value = ''; $('u-Quantidade').value = '1';
     if (r && r.restante === 0 && confirm('A embalagem acabou. Marcar como terminada?')) await gravar('mudarEstado', { ID: d.MedID, Estado: 'Terminado' });
     else aviso('✅ Registado' + (r && temNum(r.restante) ? ' · restam ' + r.restante : ''));
   } catch (e) { aviso('⚠️ ' + e.message, 5000); }
