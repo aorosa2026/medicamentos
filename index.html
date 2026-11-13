@@ -156,7 +156,11 @@
         <div><label>Lote</label><input id="m-Lote"></div>
       </div>
       <input type="hidden" id="m-GTIN">
-      <label>Notas</label><textarea id="m-Notas" placeholder="ex.: receitado pela pediatra"></textarea>
+      <label>💊 Como tomar</label><textarea id="m-ComoTomar" placeholder="ex.: 5 ml de 8 em 8 horas, se febre" style="min-height:48px"></textarea>
+      <label>🩺 Receitado por</label><input id="m-ReceitadoPor" list="dl-receitado" placeholder="ex.: Dra. Silva (pediatra)">
+      <datalist id="dl-receitado"></datalist>
+      <div class="dica">Estes dois campos passam automaticamente para a próxima caixa do mesmo medicamento (podes editar ou apagar).</div>
+      <label>Notas (só desta caixa)</label><textarea id="m-Notas" placeholder="ex.: está no carro"></textarea>
       <div class="acoes"><button class="btn" id="b-guardar" onclick="guardarMed()">Guardar</button></div>
     </div>
   </section>
@@ -414,6 +418,7 @@ function desenharTudo() {
   const unicos = arr => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(b, 'pt'));
   $('dl-nomes').innerHTML = unicos(D.catalogo.map(c => c.Nome).concat(D.inventario.map(m => m.Nome))).map(n => `<option>${esc(n)}</option>`).join('');
   $('dl-locais').innerHTML = unicos(D.inventario.map(m => m.Local)).map(n => `<option>${esc(n)}</option>`).join('');
+  $('dl-receitado').innerHTML = unicos(D.inventario.map(m => m.ReceitadoPor)).map(n => `<option>${esc(n)}</option>`).join('');
   $('dl-motivos').innerHTML = unicos(D.utilizacoes.map(u => u.Motivo)).map(n => `<option>${esc(n)}</option>`).join('');
   $('lista-pessoas').innerHTML = D.pessoas.length
     ? D.pessoas.map(p => `• <b>${esc(p.Nome)}</b>${p.Notas ? ' — ' + esc(p.Notas) : ''}`).join('<br>')
@@ -446,7 +451,7 @@ function desenharInventario() {
     if (fe === 'aExpirar' && (!disponivel || cls !== 'aviso')) return false;
     if (fe === 'aAcabar' && (!disponivel || !aAcabar(m))) return false;
     if (ft) {
-      const txt = norm([m.Nome, m.Substancia, m.Local, m.Notas, m.Pessoa, ...(mot[m.ID] || [])].join(' '));
+      const txt = norm([m.Nome, m.Substancia, m.Local, m.Notas, m.Pessoa, m.ComoTomar, m.ReceitadoPor, ...(mot[m.ID] || [])].join(' '));
       if (!txt.includes(ft)) return false;
     }
     return true;
@@ -477,6 +482,8 @@ function cartaoMed(m, mot) {
     <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || '—'}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
     ${qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
     ${motivos.length ? `<div class="sub">💬 Usado para: ${esc(motivos.join(', '))}</div>` : ''}
+    ${m.ComoTomar ? `<div style="font-size:14px;margin-top:4px;background:#e8f0fe;border-radius:6px;padding:5px 8px">💊 ${esc(m.ComoTomar)}</div>` : ''}
+    ${m.ReceitadoPor ? `<div class="sub">🩺 ${esc(m.ReceitadoPor)}</div>` : ''}
     ${m.Notas ? `<div class="sub">📝 ${esc(m.Notas)}</div>` : ''}
     <div class="acoes">
       ${m.Estado === 'Disponível' ? `
@@ -609,7 +616,7 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Notas'];
+const CAMPOS = ['ID', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'ComoTomar', 'ReceitadoPor', 'Notas'];
 function limparForm() {
   CAMPOS.forEach(c => $('m-' + c).value = ''); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none';
@@ -641,13 +648,17 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN'];
+const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'ComoTomar', 'ReceitadoPor'];
+// "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
+const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor'];
+function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
 function modeloPorNome(nome) {
   const n = norm(nome); if (!n) return null;
   const cat = D.catalogo.find(c => norm(c.Nome) === n);
-  const inv = D.inventario.filter(m => norm(m.Nome) === n).pop();
+  const caixas = D.inventario.filter(m => norm(m.Nome) === n), inv = caixas[caixas.length - 1];
   if (!cat && !inv) return null;
   const r = {}; DADOS_PRODUTO.concat(['Nome']).forEach(c => { const v = cat && cat[c] !== '' && cat[c] != null ? cat[c] : (inv ? inv[c] : ''); r[c] = v == null ? '' : v; });
+  DO_ULTIMO.forEach(c => { r[c] = ultimoValor(caixas, c) || (cat && cat[c]) || ''; });
   return r;
 }
 function preencherVazios(mod, campos) {
@@ -667,7 +678,7 @@ $('m-Nome').addEventListener('change', () => {
 function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
-  ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local'].forEach(c => { if (m[c] != null && m[c] !== '') $('m-' + c).value = m[c]; });
+  ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local', 'ComoTomar', 'ReceitadoPor'].forEach(c => { if (m[c] != null && m[c] !== '') $('m-' + c).value = m[c]; });
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
 
@@ -699,9 +710,10 @@ function encontrarCaixa(r) {
 function catalogoDe(r) { return D.catalogo.find(c => mesmoCodigo(c, r)); }
 
 function modeloPorCodigo(r) {
-  const cat = catalogoDe(r), inv = D.inventario.filter(m => mesmoProduto(m, r)).pop();
+  const cat = catalogoDe(r), caixas = D.inventario.filter(m => mesmoProduto(m, r)), inv = caixas[caixas.length - 1];
   if (!cat && !inv) return null;
   const o = {}; DADOS_PRODUTO.concat(['Nome']).forEach(c => { const v = cat && cat[c] !== '' && cat[c] != null ? cat[c] : (inv ? inv[c] : ''); o[c] = v == null ? '' : v; });
+  DO_ULTIMO.forEach(c => { o[c] = ultimoValor(caixas, c) || (cat && cat[c]) || ''; });
   return o;
 }
 function preencherNova(txt, r) {
@@ -758,7 +770,8 @@ function infoUso() {
   $('u-abrir').checked = false;
   $('u-abrir').parentElement.style.display = m && !m.DataAbertura ? 'flex' : 'none';
   $('u-qtd-label').textContent = 'Quantidade tomada' + (m && m.Unidade ? ' (' + m.Unidade + ')' : '');
-  $('u-info').innerHTML = m ? [textoQtd(m) ? '📦 Resta: ' + textoQtd(m) : '', m.Local ? '📍 ' + esc(m.Local) : '', m.ValidadeReal ? '📅 ' + fmt(m.ValidadeReal) : ''].filter(Boolean).join(' · ') : '';
+  $('u-info').innerHTML = m ? (m.ComoTomar ? `<div style="font-size:14px;color:#202124;background:#e8f0fe;border-radius:6px;padding:6px 8px;margin:4px 0">💊 ${esc(m.ComoTomar)}${m.ReceitadoPor ? '<br><span class="sub">🩺 ' + esc(m.ReceitadoPor) + '</span>' : ''}</div>` : '') +
+    [textoQtd(m) ? '📦 Resta: ' + textoQtd(m) : '', m.Local ? '📍 ' + esc(m.Local) : '', m.ValidadeReal ? '📅 ' + fmt(m.ValidadeReal) : ''].filter(Boolean).join(' · ') : '';
 }
 $('u-MedID').onchange = infoUso;
 async function registarUso() {
@@ -873,6 +886,8 @@ function mostrarPainel(txt, r, idEscolhido) {
       <div class="sub">👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}</div>
       <div class="sub">📅 Validade da caixa: ${fmt(m.Validade) || '—'}${m.DataAbertura ? ' · aberta a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ' · por abrir'}</div>
       ${textoQtd(m) ? `<div class="sub">📦 Resta: ${textoQtd(m)}</div>` : ''}
+      ${m.ComoTomar ? `<div class="sub" style="color:#202124">💊 ${esc(m.ComoTomar)}</div>` : ''}
+      ${m.ReceitadoPor ? `<div class="sub">🩺 ${esc(m.ReceitadoPor)}</div>` : ''}
       ${m.Lote ? `<div class="sub">Lote ${esc(m.Lote)}</div>` : ''}
       <div class="acoes">${m.Estado === 'Disponível' ? `
         <button class="btn sec peq" onclick="painelAcao('usar','${esc(m.ID)}')">📝 Usar</button>
