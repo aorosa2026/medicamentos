@@ -94,8 +94,9 @@
       <h3>⭐ Regulares (ter sempre em casa)</h3>
       <div id="lista-regulares"></div>
       <label>Nome</label><input id="g-Nome" placeholder="ex.: Paracetamol, Anti-histamínico, Arnica">
-      <label>Procurar por (opcional)</label><input id="g-Procura" placeholder="ex.: cetirizina, desloratadina, bilastina">
-      <div class="dica">Por defeito procura o nome na substância ativa e no nome das caixas: "Paracetamol" conta Ben-u-ron, genéricos… Para grupos (anti-histamínico) escreve as substâncias separadas por vírgulas.</div>
+      <label>Procurar por (opcional)</label><input id="g-Procura" placeholder="ex.: paracetamol xarope, paracetamol supositório">
+      <div class="dica">Procura no nome, substância, dosagem e forma das caixas. Vírgula = "ou"; várias palavras juntas = "todas".<br>
+        Ex.: <i>bilastina, cetirizina</i> (qualquer uma) · <i>paracetamol comprimido</i> (adulto) · <i>paracetamol xarope, paracetamol supositório</i> (criança).</div>
       <div class="duas">
         <div><label>Mínimo de caixas</label><input type="number" min="1" id="g-Minimo" value="1"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn sec" style="width:100%" onclick="guardarRegular()">Guardar</button></div>
@@ -502,7 +503,8 @@ function linhasUsos(l) {
 
 /* ============ STOCK, REGULARES E COMPRAS (mesma lógica do email) ============ */
 const termosRegular = r => String(r.Procura || r.Nome).split(/[,;\/]/).map(norm).filter(Boolean);
-const cobre = (r, m) => { const t = norm(m.Nome) + ' ' + norm(m.Substancia); return termosRegular(r).some(x => t.includes(x)); };
+// uma caixa conta se algum termo encaixa; num termo com várias palavras, têm de aparecer todas (nome, substância, dosagem ou forma)
+const cobre = (r, m) => { const t = [m.Nome, m.Substancia, m.Dosagem, m.Forma].map(norm).join(' '); return termosRegular(r).some(x => x.split(/\s+/).every(p => t.includes(p))); };
 function valida(m, ateISO) {
   if (m.Estado !== 'Disponível') return false;
   const r = restante(m); if (r != null && r <= 0) return false;
