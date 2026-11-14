@@ -235,6 +235,7 @@
     <div class="cartao">
       <h3>Inventário</h3>
       <label class="tick"><input type="checkbox" id="c-antigos" onchange="mudarAntigos()"> Mostrar terminados e deitados fora</label>
+      <label class="tick"><input type="checkbox" id="c-som" onchange="pref.som = this.checked; guardarPref(); if (this.checked) { prepararSom(); bip(); }"> 🔊 Bip ao ler um código</label>
       <div class="dica">Desligado: o Inventário mostra só o que está em casa. Os registos antigos ficam sempre guardados no Sheet.</div>
     </div>
     <div class="cartao">
@@ -341,7 +342,7 @@ let cfg = {};
 try { cfg = JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { cfg = {}; }
 let D = VAZIO();
 const LS_PREF = 'medicamentos_pref_v1';
-let pref = { antigos: false, tipo: 'med' };
+let pref = { antigos: false, tipo: 'med', som: true };
 try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(LS_PREF) || '{}')); } catch (e) {}
 const guardarPref = () => { try { localStorage.setItem(LS_PREF, JSON.stringify(pref)); } catch (e) {} };
 
@@ -442,6 +443,16 @@ function mostrar(e) {
 }
 
 /* ============ ESTADO DE VALIDADE E QUANTIDADE ============ */
+/* ordem para USAR: abertas primeiro → validade real mais curta → expiradas no fim */
+const expirada = m => estadoValidade(m).cls === 'exp';
+const aberta = m => !!m.DataAbertura;
+function ordemUsar(a, b) {
+  return (expirada(a) - expirada(b)) || (aberta(b) - aberta(a)) || (estadoValidade(a).ord - estadoValidade(b).ord);
+}
+/* ordem do INVENTÁRIO: expiradas em cima (para retirar) → abertas → validade real mais curta */
+function ordemInventario(a, b) {
+  return (expirada(b) - expirada(a)) || (aberta(b) - aberta(a)) || (estadoValidade(a).ord - estadoValidade(b).ord);
+}
 function estadoValidade(m) {
   if (!m.ValidadeReal) return { cls: 'neutro', txt: 'sem validade', ord: 9e15 };
   const dias = Math.round((new Date(m.ValidadeReal) - new Date(hojeISO())) / 864e5);
@@ -503,7 +514,7 @@ function desenharInventario() {
   $('f-estado').innerHTML = OPC.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('f-estado').value = OPC.some(o => o[0] === vAtual) ? vAtual : 'Disponível';
   if ($('f-texto')._ver) $('f-texto')._ver();
-  $('c-antigos').checked = !!pref.antigos;
+  $('c-antigos').checked = !!pref.antigos; $('c-som').checked = pref.som !== false;
   document.querySelectorAll('#seg-tipo button').forEach(b => b.classList.toggle('ativo', b.dataset.t === pref.tipo));
   const disp = D.inventario.filter(m => m.Estado === 'Disponível' && doTipo(m));
   $('r-total').textContent = disp.length;
@@ -538,7 +549,7 @@ function desenharInventario() {
       if (!txt.includes(ft)) return false;
     }
     return true;
-  }).sort((a, b) => estadoValidade(a).ord - estadoValidade(b).ord);
+  }).sort(ordemInventario);
 
   $('lista').innerHTML = l.length ? l.map(m => cartaoMed(m, mot)).join('')
     : `<div class="vazio">Nada para mostrar.<br>${pref.tipo === 'homeo' ? 'Para registar um homeopático, marca "🌿 Homeopático" no ➕ Adicionar.' : 'Usa ➕ para adicionar medicamentos.'}</div>`;
@@ -547,8 +558,8 @@ function desenharInventario() {
 function atualizarSelectUso() {
   const disp = D.inventario.filter(m => m.Estado === 'Disponível');
   const sel = $('u-MedID').value;
-  $('u-MedID').innerHTML = disp.slice().sort((a, b) => String(a.Nome).localeCompare(b.Nome, 'pt'))
-    .map(m => `<option value="${esc(m.ID)}">${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''} (${esc(m.Pessoa || '—')})${m.Codigo ? ' · ' + esc(m.Codigo) : ''}${m.ValidadeReal ? ' · val. ' + fmt(m.ValidadeReal) : ''}</option>`).join('');
+  $('u-MedID').innerHTML = disp.slice().sort((a, b) => (expirada(a) - expirada(b)) || String(a.Nome).localeCompare(b.Nome, 'pt') || ordemUsar(a, b))
+    .map(m => `<option value="${esc(m.ID)}">${expirada(m) ? '❌ ' : aberta(m) ? '📂 ' : ''}${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''} (${esc(m.Pessoa || '—')})${m.Codigo ? ' · ' + esc(m.Codigo) : ''}${m.ValidadeReal ? ' · val. ' + fmt(m.ValidadeReal) : ''}</option>`).join('');
   if (sel) $('u-MedID').value = sel;
   infoUso();
 }
@@ -691,22 +702,27 @@ function pesquisarSintoma() {
   });
   // também os indicados para isto ("para que serve"), mesmo que nunca usados
   D.inventario.forEach(m => { if (m.Estado === 'Disponível' && norm(m.Indicacoes).includes(t) && !grupos[m.ID]) grupos[m.ID] = { m, n: 0, ultima: '', pessoas: new Set(), indicado: true }; });
-  const lista = Object.values(grupos).sort((a, b) => b.n - a.n || estadoValidade(a.m).ord - estadoValidade(b.m).ord);
+  const todos = Object.values(grupos).sort((a, b) => ordemUsar(a.m, b.m));
+  const lista = todos.filter(g => !expirada(g.m)), velhos = todos.filter(g => expirada(g.m));
   let html = '';
-  if (lista.length) {
-    html += '<div class="sub" style="margin:10px 0 4px"><b>Em casa, para isto:</b></div>';
-    html += lista.map(g => { const ev = estadoValidade(g.m); return `<div class="cartao" style="background:#f8fafd">
+  const cartao = g => { const ev = estadoValidade(g.m), x = expirada(g.m); return `<div class="cartao" style="background:${x ? '#fce8e6' : '#f8fafd'}">
       <div class="linha" style="justify-content:space-between"><b>${esc(g.m.Nome)} ${esc(g.m.Dosagem || '')}</b><span class="badge ${ev.cls}">${ev.txt}</span></div>
+      <div class="sub">${g.m.Codigo ? '<span class="codigo">' + esc(g.m.Codigo) + '</span> ' : ''}${aberta(g.m) ? '📂 aberta a ' + fmt(g.m.DataAbertura) + ' · ' : ''}válida até ${fmt(g.m.ValidadeReal) || '—'}</div>
       <div class="sub">${esc(g.m.Substancia || '')}${g.n ? ` · usado ${g.n}× · última vez ${fmt(g.ultima)} · ${esc([...g.pessoas].join(', '))}` : ' · ainda não usado'}</div>
       ${g.m.Indicacoes ? `<div class="sub">🎯 ${esc(g.m.Indicacoes)}</div>` : ''}
       ${g.m.ComoTomar ? `<div class="sub" style="color:#202124">💊 ${esc(g.m.ComoTomar)}</div>` : ''}
       ${textoQtd(g.m) ? `<div class="sub">📦 Resta: ${textoQtd(g.m)}${g.m.Local ? ' · 📍 ' + esc(g.m.Local) : ''}</div>` : (g.m.Local ? `<div class="sub">📍 ${esc(g.m.Local)}</div>` : '')}
-      <div class="acoes"><button class="btn sec peq" onclick="irUsar('${esc(g.m.ID)}')">📝 Usar</button></div></div>`; }).join('');
-  } else if (usos.length) {
-    html += '<div class="sub" style="margin:10px 0">Já foi tratado antes, mas esses medicamentos já não estão disponíveis.</div>';
-  } else {
-    html += '<div class="sub" style="margin:10px 0">Sem registos para este sintoma.</div>';
+      ${x ? '<div class="sub" style="color:var(--vermelho)"><b>Fora de prazo: não usar.</b></div>' : `<div class="acoes"><button class="btn sec peq" onclick="irUsar('${esc(g.m.ID)}')">📝 Usar</button></div>`}</div>`; };
+  if (lista.length) {
+    html += '<div class="sub" style="margin:10px 0 4px"><b>Em casa, para isto</b> (abertas primeiro, depois a que expira mais cedo):</div>';
+    html += lista.map(cartao).join('');
   }
+  if (velhos.length) {
+    html += '<div class="sub" style="margin:12px 0 4px;color:var(--vermelho)"><b>❌ Fora de prazo (retirar):</b></div>' + velhos.map(cartao).join('');
+  }
+  if (!todos.length) html += usos.length
+    ? '<div class="sub" style="margin:10px 0">Já foi tratado antes, mas esses medicamentos já não estão disponíveis.</div>'
+    : '<div class="sub" style="margin:10px 0">Sem registos para este sintoma.</div>';
   if (usos.length) html += `<details style="margin-top:6px"><summary class="sub">Ver histórico (${usos.length})</summary>${linhasUsos(usos.slice().reverse())}</details>`;
   $('s-resultado').innerHTML = html;
 }
@@ -993,7 +1009,32 @@ function carregarLib() {
 }
 const TITULOS = { verificar: '🔍 Verificar caixas', adicionar: '➕ Ler caixa nova', usar: '📝 Ler caixa a usar' };
 // modos: 'verificar' (contínuo: lê caixa atrás de caixa), 'adicionar', 'usar'
+/* ---- bip de leitor de supermercado (gerado no próprio telemóvel, sem ficheiros de som) ---- */
+let audio = null;
+function prepararSom() {   // os telemóveis só deixam tocar som depois de um toque no ecrã
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); } catch (e) { audio = null; }
+}
+function tom(freq, ini, dur, vol) {
+  const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime + ini;
+  o.type = 'sine'; o.frequency.value = freq;                               // onda suave (sem o "zumbido" da onda quadrada)
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);   // entrada e saída suaves
+  g.gain.setValueAtTime(vol, t + dur - 0.04); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+function bip(erro) {
+  if (pref.som === false || !audio) return;
+  try {
+    if (erro) { tom(440, 0, 0.12, 0.10); tom(440, 0.17, 0.12, 0.10); }   // dois bips graves: não deu
+    else {                                                               // lido: o mesmo bip da app dos livros
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 1200; g.gain.value = 0.08; o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + 0.08);
+    }
+  } catch (e) {}
+}
+
 async function abrirLeitor(modo) {
+  prepararSom();
   modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 }; $('leitor-fechar').textContent = '✕ Desligar';
   $('leitor-titulo').textContent = TITULOS[modo] || '📷 Ler caixa';
   $('leitor-dica').textContent = modo === 'verificar' ? 'Lê as caixas uma a uma (quadradinho ou código de barras). A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) ou para o código de barras';
@@ -1008,6 +1049,7 @@ async function abrirLeitor(modo) {
       if (txt === ultima.txt && Date.now() - ultima.t < 4000) return;   // mesma caixa ainda à frente da câmara
       ultima = { txt, t: Date.now() };
       if (navigator.vibrate) navigator.vibrate(60);
+      bip(!lerGS1(txt).gtin && !lerGS1(txt).nregisto && !lerGS1(txt).validade);
       tratarLeitura(txt);
     });
   } catch (e) { await fecharLeitor(); aviso('Não consegui abrir a câmara: ' + e, 5000); }
