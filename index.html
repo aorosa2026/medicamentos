@@ -193,6 +193,48 @@
   <!-- UTILIZAÇÕES -->
   <section id="e-usos" class="ecra">
     <div class="cartao">
+      <h3>📅 Hoje</h3>
+      <div id="hoje"></div>
+    </div>
+    <div class="cartao">
+      <div class="linha" style="justify-content:space-between">
+        <h3>💊 Tratamentos</h3>
+        <button class="btn sec peq" id="b-novo-trat" onclick="novoTratamento()">➕ Novo</button>
+      </div>
+      <div id="lista-trat"></div>
+      <div id="form-trat" style="display:none;border-top:1px solid #eee;margin-top:8px;padding-top:4px">
+        <input type="hidden" id="t-ID">
+        <label>Medicamento (caixa)</label><select id="t-MedID"></select>
+        <div class="duas">
+          <div><label>Quem toma</label><select id="t-Pessoa"></select></div>
+          <div><label id="t-dose-label">Dose</label><input type="number" min="0" step="any" id="t-Dose" value="1"></div>
+        </div>
+        <label>De quanto em quanto tempo</label>
+        <div class="linha" style="flex-wrap:nowrap">
+          <select id="t-Intervalo" style="flex:1.4" onchange="$('t-outro').style.display = this.value === 'outro' ? 'block' : 'none'">
+            <option value="4">de 4 em 4 horas</option><option value="6">de 6 em 6 horas</option>
+            <option value="8" selected>de 8 em 8 horas</option><option value="12">de 12 em 12 horas</option>
+            <option value="24">1 vez por dia</option><option value="48">de 2 em 2 dias</option>
+            <option value="168">1 vez por semana</option><option value="outro">outro…</option>
+          </select>
+          <input type="number" min="1" id="t-outro" placeholder="horas" style="display:none;flex:1">
+        </div>
+        <label>1.ª toma</label><input type="datetime-local" id="t-Inicio">
+        <div class="duas">
+          <div><label>Durante (dias)</label><input type="number" min="1" id="t-Dias" placeholder="ex.: 7" oninput="diasParaFim()"></div>
+          <div><label>…ou até ao dia</label><input type="date" id="t-Fim"></div>
+        </div>
+        <div class="dica">Sem data final = tratamento contínuo.</div>
+        <label>Para quê</label><input id="t-Motivo" placeholder="ex.: otite" list="dl-motivos">
+        <label class="tick"><input type="checkbox" id="t-jaTomei" checked> Já tomou a 1.ª toma (registar agora)</label>
+        <label class="tick"><input type="checkbox" id="t-avisos" checked> 🔔 Avisar no Google Calendar</label>
+        <div class="acoes">
+          <button class="btn" onclick="guardarTratamento()">Guardar tratamento</button>
+          <button class="btn sec" onclick="$('form-trat').style.display='none'">Cancelar</button>
+        </div>
+      </div>
+    </div>
+    <div class="cartao">
       <h3>🔎 Para que sintoma?</h3>
       <input id="s-texto" class="limpavel" placeholder="ex.: febre, tosse, dor de ouvido…">
       <div id="s-resultado"></div>
@@ -337,7 +379,7 @@ function lerGS1(texto) {
 /* ============ ESTADO E LIGAÇÃO ============ */
 const LS = 'medicamentos_cfg_v1';
 const LS_DADOS = 'medicamentos_dados_v2';
-const VAZIO = () => ({ pessoas: [], inventario: [], utilizacoes: [], catalogo: [], regulares: [], config: { diasAlerta: 30 } });
+const VAZIO = () => ({ pessoas: [], inventario: [], utilizacoes: [], catalogo: [], regulares: [], tratamentos: [], tomas: [], config: { diasAlerta: 30 } });
 let cfg = {};
 try { cfg = JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { cfg = {}; }
 let D = VAZIO();
@@ -347,6 +389,12 @@ try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(LS_PREF) || '{}
 const guardarPref = () => { try { localStorage.setItem(LS_PREF, JSON.stringify(pref)); } catch (e) {} };
 
 // configuração rápida por ligação (#url=…&key=…). O "#" nunca é enviado ao servidor.
+// ligação vinda do aviso do calendário: #tomei=ID_DO_TRATAMENTO
+let tomeiPendente = null;
+(function () {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get('tomei')) { tomeiPendente = p.get('tomei'); history.replaceState(null, '', location.pathname); }
+})();
 (function () {
   if (!location.hash.includes('key=')) return;
   const p = new URLSearchParams(location.hash.slice(1));
@@ -421,12 +469,12 @@ async function carregar() {
   try {
     const c = JSON.parse(localStorage.getItem(LS_DADOS) || 'null');
     if (c && c.url === cfg.url && c.D) {
-      D = c.D; desenharTudo();
+      D = Object.assign(VAZIO(), c.D); desenharTudo(); if (tomeiPendente && D.tratamentos.length) confirmarTomei();
       sync('A atualizar… (dados de ' + new Date(c.quando).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ')');
     } else sync('A carregar…');
   } catch (e) { sync('A carregar…'); }
   // 2) atualiza em segundo plano
-  try { aplicarDados(await api('dados')); }
+  try { aplicarDados(await api('dados')); if (tomeiPendente) confirmarTomei(); }
   catch (e) { sync('⚠️ Sem ligação: a mostrar os últimos dados guardados'); aviso('⚠️ ' + e.message, 5000); }
 }
 
@@ -488,7 +536,7 @@ function desenharTudo() {
   $('lista-pessoas').innerHTML = D.pessoas.length
     ? D.pessoas.map(p => `• <b>${esc(p.Nome)}</b>${p.Notas ? ' — ' + esc(p.Notas) : ''}`).join('<br>')
     : 'Ainda não há pessoas. Adiciona em baixo.';
-  desenharInventario(); desenharUsos(); pesquisarSintoma(); desenharStock();
+  desenharInventario(); desenharUsos(); pesquisarSintoma(); desenharStock(); desenharTratamentos();
 }
 
 function motivosPorMed() {
@@ -589,6 +637,7 @@ function cartaoMed(m, mot) {
         ${!m.DataAbertura ? `<button class="btn sec peq" onclick="abrirMed('${esc(m.ID)}')">📂 Abri hoje</button>` : ''}
         <button class="btn sec peq" onclick="editar('${esc(m.ID)}')">✏️ Editar</button>
         <button class="btn sec peq" onclick="duplicar('${esc(m.ID)}')">➕ Outra igual</button>
+        <button class="btn sec peq" onclick="mostrar('usos'); novoTratamento('${esc(m.ID)}')">⏰ Tratamento</button>
         <button class="btn perigo peq" onclick="estado('${esc(m.ID)}','Terminado')">Terminou</button>
         <button class="btn perigo peq" onclick="estado('${esc(m.ID)}','Deitado fora')">🗑️ Fora</button>`
       : `<button class="btn sec peq" onclick="estado('${esc(m.ID)}','Disponível')">Repor</button>`}
@@ -685,6 +734,161 @@ async function guardarRegular() {
 async function apagarRegular(nome) {
   if (!confirm('Tirar "' + nome + '" dos regulares?')) return;
   gravar('guardarRegular', { Nome: nome, apagar: true }, D => { D.regulares = (D.regulares || []).filter(r => r.Nome !== nome); }).catch(() => {});
+}
+
+/* ============ TRATAMENTOS: HOJE, LISTA E FORMULÁRIO ============ */
+const H = 3600000;
+const hhmm = d => d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+const localInput = d => { const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return x.toISOString().slice(0, 16); };
+const ativos = () => (D.tratamentos || []).filter(t => t.Ativo !== 'Não');
+function fimDe(t) { if (!t.Fim) return null; const [y, m, d] = String(t.Fim).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d, 23, 59, 59).getTime(); }
+/** horas das tomas de um tratamento entre "de" e "ate" (ms) */
+function tomasEntre(t, de, ate) {
+  const ini = new Date(t.Inicio).getTime(), h = Number(t.IntervaloHoras) * H, fim = fimDe(t), out = [];
+  if (!(h > 0) || isNaN(ini)) return out;
+  let k = Math.max(0, Math.ceil((de - ini) / h));
+  for (let ms = ini + k * h; ms <= ate && (!fim || ms <= fim) && out.length < 50; ms += h) out.push(ms);
+  return out;
+}
+/** toma já registada perto desta hora prevista? (até meia distância entre tomas) */
+function tomaFeita(t, ms) {
+  const meio = Number(t.IntervaloHoras) * H / 2;
+  return (D.tomas || []).find(x => x.TratID === t.ID && Math.abs(new Date(x.Prevista).getTime() - ms) < meio);
+}
+const descTrat = t => `${t.Dose !== '' && t.Dose != null ? t.Dose + ' ' + (t.Unidade || '') + ' · ' : ''}${Number(t.IntervaloHoras) === 24 ? '1× por dia' : Number(t.IntervaloHoras) % 24 === 0 ? 'de ' + Number(t.IntervaloHoras) / 24 + ' em ' + Number(t.IntervaloHoras) / 24 + ' dias' : 'de ' + t.IntervaloHoras + ' em ' + t.IntervaloHoras + ' h'}`;
+
+function desenharTratamentos() {
+  const agora = Date.now(), d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const iniDia = d0.getTime(), fimDia = iniDia + 24 * H - 1;
+  // --- Hoje ---
+  const linhas = [];
+  ativos().forEach(t => tomasEntre(t, iniDia, fimDia).forEach(ms => linhas.push({ t, ms, feita: tomaFeita(t, ms) })));
+  linhas.sort((a, b) => a.ms - b.ms);
+  const proxima = linhas.find(l => !l.feita && l.ms >= agora - 30 * 60000);
+  $('hoje').innerHTML = linhas.length ? linhas.map(l => {
+    const atrasada = !l.feita && l.ms < agora - 30 * 60000, eProx = l === proxima;
+    return `<div class="linha" style="border-top:1px solid #eee;padding:8px 0;${eProx ? 'background:#fef7e0;margin:0 -8px;padding:8px;border-radius:8px' : ''}">
+      <b style="font-size:17px;width:52px">${hhmm(new Date(l.ms))}</b>
+      <span style="flex:1"><b>${esc(l.t.Nome)}</b> <span class="sub">${esc(l.t.Pessoa || '')}${l.t.Dose !== '' ? ' · ' + esc(l.t.Dose + ' ' + (l.t.Unidade || '')) : ''}</span>
+        ${l.feita ? `<br><span class="sub" style="color:var(--verde)">✅ tomada às ${hhmm(new Date(l.feita.TomadaEm))}</span>` : atrasada ? '<br><span class="sub" style="color:var(--vermelho)">🔴 por tomar (atrasada)</span>' : ''}</span>
+      ${l.feita ? '' : `<button class="btn ${eProx || atrasada ? '' : 'sec'} peq" onclick="tomarDose('${esc(l.t.ID)}', ${l.ms})">✅ Tomei</button>`}
+    </div>`; }).join('')
+    : `<div class="sub">${ativos().length ? 'Não há tomas para hoje.' : 'Sem tratamentos a decorrer. Usa ➕ Novo para começar um.'}</div>`;
+  // próximas tomas de amanhã em diante (quando hoje já não há)
+  if (ativos().length && !proxima) {
+    const prox = ativos().map(t => ({ t, ms: tomasEntre(t, agora, agora + 14 * 24 * H)[0] })).filter(x => x.ms).sort((a, b) => a.ms - b.ms)[0];
+    if (prox) $('hoje').innerHTML += `<div class="sub" style="margin-top:6px">Próxima: <b>${esc(prox.t.Nome)}</b> ${new Date(prox.ms).toLocaleString('pt-PT', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>`;
+  }
+  // --- Lista de tratamentos ---
+  $('lista-trat').innerHTML = ativos().length ? ativos().map(t => {
+    const fim = fimDe(t), acabou = fim && fim < agora;
+    return `<div style="border-top:1px solid #eee;padding:8px 0">
+      <b>${esc(t.Nome)}</b> <span class="sub">— ${esc(t.Pessoa || '')}</span>
+      <div class="sub">${esc(descTrat(t))} · desde ${new Date(t.Inicio).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        ${t.Fim ? ' · até ' + fmt(String(t.Fim).slice(0, 10)) : ' · contínuo'}${t.Motivo ? ' · ' + esc(t.Motivo) : ''}${t.Eventos ? ' · 🔔' : ''}</div>
+      ${acabou ? '<div class="sub" style="color:var(--verde)">Terminou. Podes arquivá-lo.</div>' : ''}
+      <div class="acoes">
+        <button class="btn sec peq" onclick="editarTratamento('${esc(t.ID)}')">✏️ Editar</button>
+        <button class="btn perigo peq" onclick="terminarTratamento('${esc(t.ID)}')">⏹ ${acabou ? 'Arquivar' : 'Terminar'}</button>
+      </div></div>`; }).join('') : '';
+  // seletores do formulário
+  const disp = D.inventario.filter(m => m.Estado === 'Disponível' && !expirada(m)).sort((a, b) => String(a.Nome).localeCompare(b.Nome, 'pt') || ordemUsar(a, b));
+  const sel = $('t-MedID').value;
+  $('t-MedID').innerHTML = disp.map(m => `<option value="${esc(m.ID)}">${aberta(m) ? '📂 ' : ''}${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''}${m.Codigo ? ' · ' + esc(m.Codigo) : ''}</option>`).join('');
+  if (sel) $('t-MedID').value = sel;
+  const selP = $('t-Pessoa').value;
+  $('t-Pessoa').innerHTML = D.pessoas.map(p => `<option>${esc(p.Nome)}</option>`).join('') + '<option>Outra pessoa</option>';
+  if (selP) $('t-Pessoa').value = selP;
+  doseLabel();
+}
+function doseLabel() { const m = D.inventario.find(x => x.ID === $('t-MedID').value); $('t-dose-label').textContent = 'Dose' + (m && m.Unidade ? ' (' + m.Unidade + ')' : ''); }
+$('t-MedID').addEventListener('change', () => {
+  doseLabel();
+  const m = D.inventario.find(x => x.ID === $('t-MedID').value);
+  if (m && m.Indicacoes && !$('t-Motivo').value) $('t-Motivo').value = String(m.Indicacoes).split(',')[0].trim();
+});
+function diasParaFim() {
+  const n = parseInt($('t-Dias').value, 10), ini = $('t-Inicio').value ? new Date($('t-Inicio').value) : new Date();
+  if (n > 0) { const f = new Date(ini); f.setDate(f.getDate() + n - 1); $('t-Fim').value = localInput(f).slice(0, 10); }
+}
+function novoTratamento(medID) {
+  $('form-trat').style.display = 'block'; $('t-ID').value = '';
+  const d = new Date(); d.setSeconds(0, 0); d.setMinutes(Math.round(d.getMinutes() / 5) * 5);
+  $('t-Inicio').value = localInput(d); $('t-Fim').value = ''; $('t-Dias').value = ''; $('t-Motivo').value = ''; $('t-Dose').value = '1';
+  $('t-Intervalo').value = '8'; $('t-outro').style.display = 'none'; $('t-jaTomei').checked = true; $('t-avisos').checked = true;
+  if (medID) $('t-MedID').value = medID;
+  $('t-MedID').dispatchEvent(new Event('change'));
+  $('form-trat').scrollIntoView({ block: 'start' });
+}
+function editarTratamento(id) {
+  const t = (D.tratamentos || []).find(x => x.ID === id); if (!t) return;
+  if (String(id).startsWith('tmp')) { aviso('⏳ Ainda a guardar… tenta daqui a uns segundos.'); return; }
+  novoTratamento(t.MedID);
+  $('t-ID').value = t.ID; $('t-Pessoa').value = t.Pessoa; $('t-Dose').value = t.Dose; $('t-Motivo').value = t.Motivo || '';
+  const h = String(t.IntervaloHoras);
+  if ([...$('t-Intervalo').options].some(o => o.value === h)) $('t-Intervalo').value = h; else { $('t-Intervalo').value = 'outro'; $('t-outro').style.display = 'block'; $('t-outro').value = h; }
+  $('t-Inicio').value = localInput(new Date(t.Inicio)); $('t-Fim').value = t.Fim ? String(t.Fim).slice(0, 10) : '';
+  $('t-jaTomei').checked = false; $('t-avisos').checked = true;
+}
+function guardarTratamento() {
+  const h = $('t-Intervalo').value === 'outro' ? Number($('t-outro').value) : Number($('t-Intervalo').value);
+  const d = { ID: $('t-ID').value || undefined, MedID: $('t-MedID').value, Pessoa: $('t-Pessoa').value, Dose: $('t-Dose').value,
+              IntervaloHoras: h, Inicio: $('t-Inicio').value ? new Date($('t-Inicio').value).toISOString() : '', Fim: $('t-Fim').value,
+              Motivo: $('t-Motivo').value.trim(), avisos: $('t-avisos').checked, jaTomei: $('t-jaTomei').checked };
+  if (!d.MedID) { aviso('Escolhe o medicamento'); return; }
+  if (!(h > 0)) { aviso('Indica de quantas em quantas horas'); return; }
+  if (!d.Inicio) { aviso('Indica a hora da 1.ª toma'); return; }
+  if (d.Fim && d.Fim < d.Inicio.slice(0, 10)) { aviso('A data final é anterior à 1.ª toma'); return; }
+  const m = D.inventario.find(x => x.ID === d.MedID);
+  $('form-trat').style.display = 'none';
+  aviso(d.avisos ? '⏳ A guardar e a criar os avisos no calendário…' : '✅ Tratamento guardado', 4000);
+  gravar('guardarTratamento', d, D => {
+    const t = { ID: d.ID || 'tmp' + Date.now(), Pessoa: d.Pessoa, Nome: m ? m.Nome : '', MedID: d.MedID, Dose: d.Dose, Unidade: m ? m.Unidade : '',
+                IntervaloHoras: h, Inicio: d.Inicio, Fim: d.Fim, Motivo: d.Motivo, Ativo: 'Sim', Eventos: d.avisos ? '…' : '' };
+    D.tratamentos = (D.tratamentos || []).filter(x => x.ID !== t.ID).concat([t]);
+    if (d.jaTomei) D.tomas = (D.tomas || []).concat([{ TratID: t.ID, Prevista: d.Inicio, TomadaEm: new Date().toISOString(), MedID: d.MedID, Pessoa: d.Pessoa }]);
+  }).then(r => { if (r && d.avisos) aviso(r.avisos ? '✅ Tratamento guardado · avisos criados no calendário "💊 Medicamentos"' : '✅ Tratamento guardado', 4500); }).catch(() => {});
+}
+function terminarTratamento(id) {
+  const t = (D.tratamentos || []).find(x => x.ID === id); if (!t) return;
+  if (!confirm(`Terminar o tratamento de ${t.Nome}${t.Pessoa ? ' (' + t.Pessoa + ')' : ''}?\nOs avisos no calendário são apagados. O histórico das tomas fica guardado.`)) return;
+  gravar('terminarTratamento', { ID: id }, D => { const x = D.tratamentos.find(y => y.ID === id); if (x) { x.Ativo = 'Não'; x.Eventos = ''; } }).catch(() => {});
+}
+function tomarDose(tratID, ms) {
+  const t = (D.tratamentos || []).find(x => x.ID === tratID); if (!t) return;
+  if (String(tratID).startsWith('tmp')) { aviso('⏳ Ainda a guardar o tratamento… tenta daqui a uns segundos.'); return; }
+  const prev = new Date(ms).toISOString();
+  gravar('tomarDose', { TratID: tratID, Prevista: prev }, D => {
+    D.tomas = (D.tomas || []).concat([{ TratID: tratID, Prevista: prev, TomadaEm: new Date().toISOString(), MedID: t.MedID, Pessoa: t.Pessoa }]);
+    const m = D.inventario.find(x => x.ID === t.MedID);
+    if (m && temNum(t.Dose)) { const r = restante(m); if (r != null) m.Restante = Math.max(0, Math.round((r - Number(t.Dose)) * 100) / 100); }
+  }).then(r => { if (r && r.restante === 0) aviso('📦 A caixa de ' + t.Nome + ' acabou. Marca-a como terminada no Inventário.', 6000); }).catch(() => {});
+  aviso('✅ Toma registada: ' + t.Nome);
+}
+/** Aberto a partir do aviso do calendário: pergunta pela toma mais próxima da hora atual. */
+function confirmarTomei() {
+  const id = tomeiPendente; tomeiPendente = null;
+  const t = (D.tratamentos || []).find(x => x.ID === id);
+  mostrar('usos');
+  if (!t || t.Ativo === 'Não') { aviso('Este tratamento já terminou.', 4000); return; }
+  const h = Number(t.IntervaloHoras) * H, agora = Date.now();
+  const cand = tomasEntre(t, agora - h, agora + h);
+  if (!cand.length) { aviso('Não há nenhuma toma prevista para agora.', 4000); return; }
+  const ms = cand.reduce((a, b) => Math.abs(b - agora) < Math.abs(a - agora) ? b : a);
+  const feita = tomaFeita(t, ms);
+  $('leitor-titulo').textContent = '💊 Toma'; $('leitor-fechar').textContent = '✕ Fechar'; $('leitor-dica').textContent = ''; $('leitor').style.display = 'none';
+  painelAtual = null; $('leitorModal').style.display = 'flex';
+  $('leitor-res').innerHTML = `<div class="etiqueta">
+      <div style="font-size:20px;font-weight:700">${esc(t.Nome)}</div>
+      <div style="font-size:15px;margin-top:4px">${esc(t.Pessoa || '')}${t.Dose !== '' ? ' · ' + esc(t.Dose + ' ' + (t.Unidade || '')) : ''}</div>
+      <div style="font-size:18px;margin-top:10px">Toma das <b>${hhmm(new Date(ms))}</b></div>
+      ${feita ? `<div style="margin-top:10px;color:var(--verde);font-weight:600">✅ Já registada às ${hhmm(new Date(feita.TomadaEm))}</div>` : ''}
+    </div>
+    <div class="acoes" style="justify-content:center">
+      ${feita ? '<button class="btn" onclick="fecharLeitor()">OK</button>'
+              : `<button class="btn" style="font-size:18px;padding:14px 22px" onclick="fecharLeitor(); tomarDose('${esc(t.ID)}', ${ms})">✅ Sim, tomei</button>
+                 <button class="btn sec" onclick="fecharLeitor()">Agora não</button>`}
+    </div>`;
 }
 
 /* ============ PESQUISA POR SINTOMA ============ */
