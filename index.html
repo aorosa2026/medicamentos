@@ -220,11 +220,15 @@
           <input type="number" min="1" id="t-outro" placeholder="horas" style="display:none;flex:1">
         </div>
         <label>1.ª toma</label><input type="datetime-local" id="t-Inicio">
-        <div class="duas">
-          <div><label>Durante (dias)</label><input type="number" min="1" id="t-Dias" placeholder="ex.: 7" oninput="diasParaFim()"></div>
-          <div><label>…ou até ao dia</label><input type="date" id="t-Fim"></div>
+        <label class="tick"><input type="checkbox" id="t-ateFim" onchange="ateFimCaixa()"> 📦 Até acabar a caixa</label>
+        <div id="t-estimativa" class="dica" style="display:none"></div>
+        <div id="t-datas">
+          <div class="duas">
+            <div><label>Durante (dias)</label><input type="number" min="1" id="t-Dias" placeholder="ex.: 7" oninput="diasParaFim()"></div>
+            <div><label>…ou até ao dia</label><input type="date" id="t-Fim"></div>
+          </div>
+          <div class="dica">Sem data final = tratamento contínuo.</div>
         </div>
-        <div class="dica">Sem data final = tratamento contínuo.</div>
         <label>Para quê</label><input id="t-Motivo" placeholder="ex.: otite" list="dl-motivos">
         <label class="tick"><input type="checkbox" id="t-jaTomei" checked> Já tomou a 1.ª toma (registar agora)</label>
         <label class="tick"><input type="checkbox" id="t-avisos" checked> 🔔 Avisar no Google Calendar</label>
@@ -757,6 +761,10 @@ function tomaFeita(t, ms) {
 }
 const descTrat = t => `${t.Dose !== '' && t.Dose != null ? t.Dose + ' ' + (t.Unidade || '') + ' · ' : ''}${Number(t.IntervaloHoras) === 24 ? '1× por dia' : Number(t.IntervaloHoras) % 24 === 0 ? 'de ' + Number(t.IntervaloHoras) / 24 + ' em ' + Number(t.IntervaloHoras) / 24 + ' dias' : 'de ' + t.IntervaloHoras + ' em ' + t.IntervaloHoras + ' h'}`;
 
+function textoAteFim(t) {
+  const m = D.inventario.find(x => x.ID === t.MedID), r = m ? restante(m) : null, d = Number(t.Dose);
+  return r != null && d > 0 ? `📦 até acabar a caixa (faltam ${Math.ceil(r / d - 1e-9)} toma(s))` : '📦 até acabar a caixa';
+}
 function desenharTratamentos() {
   const agora = Date.now(), d0 = new Date(); d0.setHours(0, 0, 0, 0);
   const iniDia = d0.getTime(), fimDia = iniDia + 24 * H - 1;
@@ -785,7 +793,7 @@ function desenharTratamentos() {
     return `<div style="border-top:1px solid #eee;padding:8px 0">
       <b>${esc(t.Nome)}</b> <span class="sub">— ${esc(t.Pessoa || '')}</span>
       <div class="sub">${esc(descTrat(t))} · desde ${new Date(t.Inicio).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-        ${t.Fim ? ' · até ' + fmt(String(t.Fim).slice(0, 10)) : ' · contínuo'}${t.Motivo ? ' · ' + esc(t.Motivo) : ''}${t.Eventos ? ' · 🔔' : ''}</div>
+        ${t.AteFimCaixa === 'Sim' ? ' · ' + textoAteFim(t) : t.Fim ? ' · até ' + fmt(String(t.Fim).slice(0, 10)) : ' · contínuo'}${t.Motivo ? ' · ' + esc(t.Motivo) : ''}${t.Eventos ? ' · 🔔' : ''}</div>
       ${acabou ? '<div class="sub" style="color:var(--verde)">Terminou. Podes arquivá-lo.</div>' : ''}
       <div class="acoes">
         <button class="btn sec peq" onclick="editarTratamento('${esc(t.ID)}')">✏️ Editar</button>
@@ -807,6 +815,27 @@ $('t-MedID').addEventListener('change', () => {
   const m = D.inventario.find(x => x.ID === $('t-MedID').value);
   if (m && m.Indicacoes && !$('t-Motivo').value) $('t-Motivo').value = String(m.Indicacoes).split(',')[0].trim();
 });
+/** "até acabar a caixa": quantas tomas faltam e quando deve acabar */
+function estimativaCaixa(medID, dose, h, inicioMs) {
+  const m = D.inventario.find(x => x.ID === medID); if (!m) return null;
+  const r = restante(m), d = Number(dose);
+  if (r == null || !(d > 0)) return { erro: r == null ? 'A caixa não tem quantidade: preenche-a em ✏️ Editar.' : 'Indica a dose.' };
+  const n = Math.ceil(r / d - 1e-9);
+  return { n, resta: r, unidade: m.Unidade || '', fim: inicioMs + (n - 1) * h * H };
+}
+function ateFimCaixa() {
+  const on = $('t-ateFim').checked;
+  $('t-datas').style.display = on ? 'none' : 'block'; $('t-estimativa').style.display = on ? 'block' : 'none';
+  if (!on) return;
+  const h = $('t-Intervalo').value === 'outro' ? Number($('t-outro').value) : Number($('t-Intervalo').value);
+  const ini = $('t-Inicio').value ? new Date($('t-Inicio').value).getTime() : Date.now();
+  const e = estimativaCaixa($('t-MedID').value, $('t-Dose').value, h, ini);
+  $('t-estimativa').innerHTML = !e ? '' : e.erro ? '<span style="color:var(--vermelho)">⚠️ ' + e.erro + '</span>'
+    : `A caixa tem <b>${e.resta} ${esc(e.unidade)}</b> → <b>${e.n} toma(s)</b>. Deve acabar por volta de <b>${new Date(e.fim).toLocaleString('pt-PT', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b>.<br>
+       Os avisos continuam até a caixa chegar a zero; aí o tratamento termina sozinho.`;
+}
+['t-MedID', 't-Dose', 't-Intervalo', 't-outro', 't-Inicio'].forEach(id => $(id).addEventListener('input', ateFimCaixa));
+$('t-MedID').addEventListener('change', ateFimCaixa); $('t-Intervalo').addEventListener('change', ateFimCaixa);
 function diasParaFim() {
   const n = parseInt($('t-Dias').value, 10), ini = $('t-Inicio').value ? new Date($('t-Inicio').value) : new Date();
   if (n > 0) { const f = new Date(ini); f.setDate(f.getDate() + n - 1); $('t-Fim').value = localInput(f).slice(0, 10); }
@@ -816,6 +845,7 @@ function novoTratamento(medID) {
   const d = new Date(); d.setSeconds(0, 0); d.setMinutes(Math.round(d.getMinutes() / 5) * 5);
   $('t-Inicio').value = localInput(d); $('t-Fim').value = ''; $('t-Dias').value = ''; $('t-Motivo').value = ''; $('t-Dose').value = '1';
   $('t-Intervalo').value = '8'; $('t-outro').style.display = 'none'; $('t-jaTomei').checked = true; $('t-avisos').checked = true;
+  $('t-ateFim').checked = false; ateFimCaixa();
   if (medID) $('t-MedID').value = medID;
   $('t-MedID').dispatchEvent(new Event('change'));
   $('form-trat').scrollIntoView({ block: 'start' });
@@ -829,12 +859,18 @@ function editarTratamento(id) {
   if ([...$('t-Intervalo').options].some(o => o.value === h)) $('t-Intervalo').value = h; else { $('t-Intervalo').value = 'outro'; $('t-outro').style.display = 'block'; $('t-outro').value = h; }
   $('t-Inicio').value = localInput(new Date(t.Inicio)); $('t-Fim').value = t.Fim ? String(t.Fim).slice(0, 10) : '';
   $('t-jaTomei').checked = false; $('t-avisos').checked = true;
+  $('t-ateFim').checked = t.AteFimCaixa === 'Sim'; ateFimCaixa();
 }
 function guardarTratamento() {
   const h = $('t-Intervalo').value === 'outro' ? Number($('t-outro').value) : Number($('t-Intervalo').value);
   const d = { ID: $('t-ID').value || undefined, MedID: $('t-MedID').value, Pessoa: $('t-Pessoa').value, Dose: $('t-Dose').value,
               IntervaloHoras: h, Inicio: $('t-Inicio').value ? new Date($('t-Inicio').value).toISOString() : '', Fim: $('t-Fim').value,
-              Motivo: $('t-Motivo').value.trim(), avisos: $('t-avisos').checked, jaTomei: $('t-jaTomei').checked };
+              Motivo: $('t-Motivo').value.trim(), avisos: $('t-avisos').checked, jaTomei: $('t-jaTomei').checked, ateFimCaixa: $('t-ateFim').checked };
+  if (d.ateFimCaixa) {
+    d.Fim = '';
+    const e = estimativaCaixa(d.MedID, d.Dose, h, Date.now());
+    if (!e || e.erro) { aviso('⚠️ ' + (e ? e.erro : 'Escolhe a caixa'), 5000); return; }
+  }
   if (!d.MedID) { aviso('Escolhe o medicamento'); return; }
   if (!(h > 0)) { aviso('Indica de quantas em quantas horas'); return; }
   if (!d.Inicio) { aviso('Indica a hora da 1.ª toma'); return; }
@@ -844,7 +880,7 @@ function guardarTratamento() {
   aviso(d.avisos ? '⏳ A guardar e a criar os avisos no calendário…' : '✅ Tratamento guardado', 4000);
   gravar('guardarTratamento', d, D => {
     const t = { ID: d.ID || 'tmp' + Date.now(), Pessoa: d.Pessoa, Nome: m ? m.Nome : '', MedID: d.MedID, Dose: d.Dose, Unidade: m ? m.Unidade : '',
-                IntervaloHoras: h, Inicio: d.Inicio, Fim: d.Fim, Motivo: d.Motivo, Ativo: 'Sim', Eventos: d.avisos ? '…' : '' };
+                IntervaloHoras: h, Inicio: d.Inicio, Fim: d.Fim, Motivo: d.Motivo, Ativo: 'Sim', Eventos: d.avisos ? '…' : '', AteFimCaixa: d.ateFimCaixa ? 'Sim' : '' };
     D.tratamentos = (D.tratamentos || []).filter(x => x.ID !== t.ID).concat([t]);
     if (d.jaTomei) D.tomas = (D.tomas || []).concat([{ TratID: t.ID, Prevista: d.Inicio, TomadaEm: new Date().toISOString(), MedID: d.MedID, Pessoa: d.Pessoa }]);
   }).then(r => { if (r && d.avisos) aviso(r.avisos ? '✅ Tratamento guardado · avisos criados no calendário "💊 Medicamentos"' : '✅ Tratamento guardado', 4500); }).catch(() => {});
@@ -862,7 +898,11 @@ function tomarDose(tratID, ms) {
     D.tomas = (D.tomas || []).concat([{ TratID: tratID, Prevista: prev, TomadaEm: new Date().toISOString(), MedID: t.MedID, Pessoa: t.Pessoa }]);
     const m = D.inventario.find(x => x.ID === t.MedID);
     if (m && temNum(t.Dose)) { const r = restante(m); if (r != null) m.Restante = Math.max(0, Math.round((r - Number(t.Dose)) * 100) / 100); }
-  }).then(r => { if (r && r.restante === 0) aviso('📦 A caixa de ' + t.Nome + ' acabou. Marca-a como terminada no Inventário.', 6000); }).catch(() => {});
+    if (t.AteFimCaixa === 'Sim' && m && m.Restante === 0) { m.Estado = 'Terminado'; const x = D.tratamentos.find(y => y.ID === tratID); x.Ativo = 'Não'; x.Eventos = ''; }
+  }).then(r => {
+    if (r && r.concluido) aviso('🎉 Caixa terminada: tratamento de ' + t.Nome + ' concluído. Os avisos foram apagados.', 7000);
+    else if (r && r.restante === 0) aviso('📦 A caixa de ' + t.Nome + ' acabou. Marca-a como terminada no Inventário.', 6000);
+  }).catch(() => {});
   aviso('✅ Toma registada: ' + t.Nome);
 }
 /** Aberto a partir do aviso do calendário: pergunta pela toma mais próxima da hora atual. */
