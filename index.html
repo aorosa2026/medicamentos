@@ -414,7 +414,7 @@ async function api(action, data) {
   const r = await fetch(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // evita pedido "preflight"
-    body: JSON.stringify({ key: cfg.key, action, data: data || {} })
+    body: JSON.stringify({ key: cfg.key, action, data: data || {}, scriptUrl: cfg.url })   // o script guarda o próprio URL para os links do calendário
   });
   const j = await r.json();
   if (!j.ok) throw new Error(j.erro || 'Erro');
