@@ -47,6 +47,10 @@
   .vazio { text-align:center; color:var(--cinza); padding:30px 10px; }
   .dica { font-size:12px; color:var(--cinza); margin-top:4px; }
   .segredo { -webkit-text-security:disc; }
+  .niveis { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+  .nv { border:1px solid #dadce0; background:#fff; color:#3c4043; border-radius:14px; padding:4px 9px; font-size:12px; }
+  .nv.on { color:#fff; border-color:transparent; font-weight:600; }
+  .nv.on.n-Cheio { background:var(--verde); } .nv.on.n-Meio { background:#1a73e8; } .nv.on.n-Quase { background:var(--amarelo); color:#202124; } .nv.on.n-Vazio { background:var(--vermelho); }
   .cartao.aberta { border-left:5px solid #8e24aa; background:#fbf6fd; }
   .badge.abertab { background:#8e24aa; }
   details.abre > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:10px 2px; font-weight:600; font-size:15px; border-top:1px solid #eee; }
@@ -108,7 +112,7 @@
   <section id="e-stock" class="ecra">
     <div class="cartao">
       <h3>🛒 Comprar</h3>
-      <div class="dica" style="margin-top:0">Regulares em falta e caixas a acabar sem reserva. Caixas que expiram nos próximos 7 dias já não contam.</div>
+      <div class="dica" style="margin-top:0">Regulares em falta. Caixas a acabar, quase no fim ou que expiram nos próximos 7 dias já não contam.</div>
       <div id="compras"></div>
     </div>
     <div class="cartao">
@@ -169,13 +173,21 @@
       <div class="linha" style="flex-wrap:nowrap;gap:6px"><input type="number" min="0" id="m-DiasAposAbertura" placeholder="ex.: 3" style="flex:1;min-width:0">
         <select id="m-UnidadePrazo" style="flex:1"><option value="dias">dias</option><option value="semanas">semanas</option><option value="meses">meses</option></select><button type="button" class="xcampo" title="Apagar prazo" onclick="limparCampo('prazo')">✕</button></div>
       <div class="dica">O prazo depois de aberto vem no folheto ou na caixa. Deixa vazio se não se aplicar.</div>
-      <div class="duas">
-        <div><label>Quantidade na embalagem</label><input type="number" min="0" step="any" id="m-Quantidade" placeholder="ex.: 20"></div>
-        <div><label>Unidade</label><input id="m-Unidade" list="dl-unidades" placeholder="comprimidos"></div>
+      <label>Contagem</label>
+      <div class="seg" id="seg-contagem" style="margin-bottom:0">
+        <button type="button" data-c="" onclick="mudarContagem('')">🔢 Contado</button>
+        <button type="button" data-c="nivel" onclick="mudarContagem('nivel')">🧴 Por aplicação</button>
       </div>
+      <input type="hidden" id="m-Contagem">
+      <div class="duas">
+        <div id="cel-qtd"><label>Quantidade na embalagem</label><input type="number" min="0" step="any" id="m-Quantidade" placeholder="ex.: 20"></div>
+        <div id="cel-nivel" style="display:none"><label>Nível</label><select id="m-Nivel"><option>Cheio</option><option>Meio</option><option>Quase no fim</option><option>Vazio</option></select></div>
+        <div><label id="lbl-unidade">Unidade</label><input id="m-Unidade" list="dl-unidades" placeholder="comprimidos"></div>
+      </div>
+      <datalist id="dl-uso"><option>aplicação</option><option>gotas</option><option>pulverização</option></datalist>
       <datalist id="dl-unidades"><option>comprimidos</option><option>cápsulas</option><option>ml</option><option>saquetas</option><option>gotas</option><option>supositórios</option><option>aplicações</option><option>ampolas</option><option>pulverizações</option></datalist>
       <div id="bloco-restante" style="display:none"><label>Ainda resta (corrige se for preciso)</label><input type="number" min="0" step="any" id="m-Restante"></div>
-      <div class="dica">Xaropes e gotas: a quantidade em ml é sempre aproximada.</div>
+      <div class="dica" id="dica-contagem">Xaropes e gotas: a quantidade em ml é sempre aproximada.</div>
       <input type="hidden" id="m-Serie">
       <div class="duas">
         <div><label>Nº registo</label><input id="m-NRegisto" inputmode="numeric"></div>
@@ -190,7 +202,8 @@
       <datalist id="dl-receitado"></datalist>
       <div class="dica">Homeopático, receita, para que serve, como tomar e receitado por passam automaticamente para a próxima caixa do mesmo medicamento (podes editar ou apagar).</div>
       <label>Notas (só desta caixa)</label><textarea id="m-Notas" placeholder="ex.: está no carro"></textarea>
-      <div class="acoes"><button class="btn" id="b-guardar" onclick="guardarMed()">Guardar</button></div>
+      <div class="acoes"><button class="btn" id="b-guardar" onclick="guardarMed()">Guardar</button>
+        <button class="btn sec" onclick="cancelarEdicao()">Cancelar</button></div>
       <div id="bloco-apagar" style="display:none;margin-top:18px;border-top:1px solid #eee;padding-top:12px">
         <button class="btn perigo peq" onclick="apagarDefinitivo()">🗑️ Apagar registo definitivamente</button>
         <div class="dica">Só para enganos: apaga a caixa e as utilizações dela do Sheet. Para caixas que deitaste fora, usa antes "🗑️ Fora".</div>
@@ -252,14 +265,15 @@
       <div id="s-resultado"></div>
       <div class="dica">É só o histórico da família. Não substitui o médico ou o farmacêutico. A dose (sobretudo nas crianças) depende da idade e do peso: confirma sempre no folheto.</div>
     </div>
-    <div class="cartao">
-      <div class="linha" style="justify-content:space-between">
-        <h3>Registar utilização</h3>
-        <button class="btn sec peq" onclick="abrirLeitor('usar')">📷 Ler caixa</button>
-      </div>
+    <div class="cartao" style="padding-top:2px;padding-bottom:2px">
+      <details class="abre" id="det-usar">
+      <summary style="border-top:0"><span>📝 Registar utilização</span></summary>
+      <div style="padding-bottom:10px">
+      <button class="btn sec peq" onclick="abrirLeitor('usar')">📷 Ler caixa</button>
       <label>Medicamento</label><select id="u-MedID"></select>
       <div id="u-info" class="dica"></div>
       <label id="u-qtd-label">Quantidade tomada</label><input type="number" min="0" step="any" id="u-Quantidade" value="1">
+      <div id="u-nivel-bloco" style="display:none"><label>Como está agora? (opcional)</label><div class="niveis" id="u-niveis"></div></div>
       <div class="duas">
         <div><label>Quem tomou</label><select id="u-Pessoa"></select></div>
         <div><label>Data</label><input type="date" id="u-Data"></div>
@@ -269,6 +283,8 @@
       <label>Notas</label><input id="u-Notas" placeholder="ex.: 5 ml às 21h">
       <label style="display:flex;gap:8px;align-items:center;color:#202124"><input type="checkbox" id="u-abrir" style="width:auto"> Abri a embalagem hoje</label>
       <div class="acoes"><button class="btn" onclick="registarUso()">Registar</button></div>
+      </div>
+      </details>
     </div>
     <div class="cartao" style="padding-top:2px;padding-bottom:2px">
       <details class="abre" id="det-usos" ontoggle="abertos.usos = this.open">
@@ -526,15 +542,42 @@ function estadoValidade(m) {
   if (dias <= (D.config.diasAlerta || 30)) return { cls: 'aviso', txt: dias === 0 ? 'Expira hoje' : `Expira em ${dias} d`, ord, dias };
   return { cls: 'ok', txt: 'OK', ord, dias };
 }
+// por aplicação (cremes, pomadas, colírios em frasco…): sem contagem, só um nível estimado
+const NIVEIS = ['Cheio', 'Meio', 'Quase no fim', 'Vazio'];
+const porNivel = m => m && m.Contagem === 'nivel';
 // caixa com quantidade mas sem "resta" registado = cheia
-const restante = m => temNum(m.Restante) ? Number(m.Restante) : temNum(m.Quantidade) ? Number(m.Quantidade) : null;
+const restante = m => porNivel(m) ? null : temNum(m.Restante) ? Number(m.Restante) : temNum(m.Quantidade) ? Number(m.Quantidade) : null;
 function aAcabar(m) {
+  if (porNivel(m)) return m.Nivel === 'Quase no fim';
   const r = restante(m), q = Number(m.Quantidade);
   return r != null && q > 0 && r <= q * 0.2;
 }
 function textoQtd(m) {
+  if (porNivel(m)) return 'nível ' + (m.Nivel || 'Cheio').toLowerCase();
   const r = restante(m); if (r == null) return '';
   return `${r}${temNum(m.Quantidade) ? ' de ' + Number(m.Quantidade) : ''} ${esc(m.Unidade || '')}`.trim();
+}
+
+function botoesNivel(atual, acao) {
+  return NIVEIS.map(n => `<button type="button" class="nv n-${n.split(' ')[0]} ${atual === n ? 'on' : ''}" onclick="${acao.replace('§', n)}">${n}</button>`).join('');
+}
+/** muda o nível com um toque; "Vazio" pergunta se retira a caixa (e se termina o tratamento) */
+function setNivel(id, n) {
+  const m = D.inventario.find(x => x.ID === id); if (!m || m.Nivel === n) return;
+  if (String(id).startsWith('tmp')) { aviso('⏳ Ainda a guardar esta caixa… tenta daqui a uns segundos.'); return; }
+  gravar('guardarMed', { ID: id, Nivel: n }, alterarLocal(id, { Nivel: n })).catch(() => {});
+  if (n === 'Vazio') perguntarVazio(id); else aviso('🧴 ' + m.Nome + ': ' + n.toLowerCase());
+}
+function perguntarVazio(id) {
+  const m = D.inventario.find(x => x.ID === id); if (!m) return;
+  if (!confirm(`"${m.Nome}" ficou vazio. Retirar do inventário?`)) return;
+  gravar('mudarEstado', { ID: id, Estado: 'Terminado' }, alterarLocal(id, { Estado: 'Terminado' })).catch(() => {});
+  aviso('🗑️ Retirado do inventário');
+  const outra = D.inventario.some(x => x.ID !== id && x.Estado === 'Disponível' && norm(x.Nome) === norm(m.Nome) && !(porNivel(x) && x.Nivel === 'Vazio'));
+  (D.tratamentos || []).filter(t => t.Ativo !== 'Não' && t.MedID === id && !outra).forEach(t => {
+    if (confirm(`Terminar também o tratamento de ${t.Nome}${t.Pessoa ? ' (' + t.Pessoa + ')' : ''}? Os avisos do calendário são apagados.`))
+      gravar('terminarTratamento', { ID: t.ID }, D => { const x = D.tratamentos.find(y => y.ID === t.ID); if (x) { x.Ativo = 'Não'; x.Eventos = ''; } }).catch(() => {});
+  });
 }
 
 /* ============ DESENHAR ============ */
@@ -645,7 +688,8 @@ function cartaoMed(m, mot) {
     ${m.Indicacoes ? `<div class="sub">🎯 ${esc(m.Indicacoes)}</div>` : ''}
     <div class="sub">👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}</div>
     <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || '—'}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
-    ${qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
+    ${porNivel(m) && m.Estado === 'Disponível' ? `<div class="sub">🧴 Nível:</div><div class="niveis">${botoesNivel(m.Nivel || 'Cheio', `setNivel('${esc(m.ID)}', '§')`)}</div>`
+      : qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
     ${motivos.length ? `<div class="sub">💬 Usado para: ${esc(motivos.join(', '))}</div>` : ''}
     ${m.ComoTomar ? `<div style="font-size:14px;margin-top:4px;background:#fef7e0;border-radius:6px;padding:5px 8px">💊 ${esc(m.ComoTomar)}</div>` : ''}
     ${m.ReceitadoPor ? `<div class="sub">🩺 ${esc(m.ReceitadoPor)}</div>` : ''}
@@ -680,6 +724,7 @@ const termosRegular = r => String(r.Procura || r.Nome).split(/[,;\/]/).map(norm)
 const cobre = (r, m) => { const t = [m.Nome, m.Substancia, m.Dosagem, m.Forma].map(norm).join(' '); return termosRegular(r).some(x => x.split(/\s+/).every(p => t.includes(p))); };
 function valida(m, ateISO) {
   if (m.Estado !== 'Disponível') return false;
+  if (porNivel(m) && m.Nivel === 'Vazio') return false;
   const r = restante(m); if (r != null && r <= 0) return false;
   return !m.ValidadeReal || String(m.ValidadeReal) > ateISO;
 }
@@ -691,14 +736,10 @@ function listaCompras() {
     const n = deste.filter(m => valida(m, ate) && !aAcabar(m)).length, min = Number(r.Minimo) || 1;
     if (n >= min) return;
     const acabar = deste.filter(m => valida(m, ate) && aAcabar(m)).length;
-    const expira = deste.filter(m => !valida(m, ate) && restante(m) !== 0).length;
-    out.push({ nome: r.Nome, regular: r, motivo: n > 0 ? `só ${n} de ${min} caixa(s)` : acabar ? 'só resta uma caixa quase vazia' : expira ? 'as caixas que há estão fora de prazo ou expiram esta semana' : 'não há nenhuma em casa' });
+    const expira = deste.filter(m => !valida(m, ate) && restante(m) !== 0 && !(porNivel(m) && m.Nivel === 'Vazio')).length;
+    out.push({ nome: r.Nome, regular: r, motivo: n > 0 ? `só ${n} de ${min} caixa(s)` : acabar ? 'só resta uma caixa quase no fim' : expira ? 'as caixas que há estão fora de prazo ou expiram esta semana' : 'não há nenhuma em casa' });
   });
-  inv.filter(m => valida(m, ate) && aAcabar(m)).forEach(m => {
-    const reserva = inv.some(x => x !== m && valida(x, ate) && !aAcabar(x) && norm(x.Nome) === norm(m.Nome));
-    if (reserva || out.some(o => o.regular && cobre(o.regular, m)) || out.some(o => norm(o.nome) === norm(m.Nome))) return;
-    out.push({ nome: m.Nome, motivo: `está a acabar (resta ${textoQtd(m)})` });
-  });
+  // só regulares: um medicamento que é para tomar até acabar não vai para Comprar
   return out;
 }
 function desenharStock() {
@@ -840,6 +881,13 @@ function estimativaCaixa(medID, dose, h, inicioMs) {
   return { n, resta: r, unidade: m.Unidade || '', fim: inicioMs + (n - 1) * h * H };
 }
 function ateFimCaixa() {
+  const mt = D.inventario.find(x => x.ID === $('t-MedID').value);
+  $('t-ateFim').disabled = porNivel(mt);
+  if (porNivel(mt)) {
+    $('t-ateFim').checked = false; $('t-datas').style.display = 'block'; $('t-estimativa').style.display = 'block';
+    $('t-estimativa').innerHTML = '🧴 Este medicamento é por aplicação: indica quantos dias ou até quando.';
+    return;
+  }
   const on = $('t-ateFim').checked;
   $('t-datas').style.display = on ? 'none' : 'block'; $('t-estimativa').style.display = on ? 'block' : 'none';
   if (!on) return;
@@ -991,7 +1039,7 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Codigo', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const CAMPOS = ['ID', 'Codigo', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
 const TICKS = ['Homeopatico', 'Receita'];
 const lerCampo = c => TICKS.includes(c) ? ($('m-' + c).checked ? 'Sim' : '') : $('m-' + c).value.trim();
 const porCampo = (c, v) => { if (TICKS.includes(c)) $('m-' + c).checked = v === 'Sim' || v === true; else $('m-' + c).value = v == null ? '' : v; };
@@ -999,6 +1047,7 @@ function limparForm() {
   CAMPOS.forEach(c => porCampo(c, '')); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   if (pref.tipo === 'homeo') $('m-Homeopatico').checked = true;
   $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none'; $('bloco-apagar').style.display = 'none'; $('f-codigo').style.display = 'none';
+  $('m-Nivel').value = 'Cheio'; contagemUI();
 }
 function editar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
@@ -1006,7 +1055,8 @@ function editar(id) {
   limparForm(); CAMPOS.forEach(c => porCampo(c, m[c]));
   if (!$('m-UnidadePrazo').value) $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   if (m.Codigo) { $('f-codigo-txt').textContent = m.Codigo; $('f-codigo').style.display = 'flex'; }
-  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; $('bloco-apagar').style.display = 'block'; mostrar('adicionar');
+  if (!$('m-Nivel').value) $('m-Nivel').value = 'Cheio';
+  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; $('bloco-apagar').style.display = 'block'; contagemUI(); mostrar('adicionar');
 }
 /* --- validade por mês/ano (como vem na caixa); guarda o último dia do mês --- */
 (function () {
@@ -1029,7 +1079,7 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
+const DADOS_PRODUTO = ['Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
 // "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
 const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor', 'Indicacoes'];
 function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
@@ -1050,6 +1100,7 @@ function preencherVazios(mod, campos) {
     const el = $('m-' + c);
     if (el.value === '' || (c === 'UnidadePrazo' && !$('m-DiasAposAbertura').value)) { el.value = mod[c]; n++; }
   });
+  contagemUI();
   return n;
 }
 // escolher um nome da lista preenche o resto
@@ -1061,10 +1112,26 @@ function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
   ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local',
-   'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
+   'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
+  contagemUI();
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
 
+function mudarContagem(c) {
+  $('m-Contagem').value = c; contagemUI();
+  if (c === 'nivel') { if (!$('m-Nivel').value) $('m-Nivel').value = 'Cheio'; if (!$('m-Unidade').value || /^(g|ml|gr)$/i.test($('m-Unidade').value)) $('m-Unidade').value = 'aplicação'; }
+}
+function contagemUI() {
+  const nivel = $('m-Contagem').value === 'nivel', editar = !!$('m-ID').value;
+  document.querySelectorAll('#seg-contagem button').forEach(b => b.classList.toggle('ativo', b.dataset.c === (nivel ? 'nivel' : '')));
+  $('cel-qtd').style.display = nivel ? 'none' : ''; $('cel-nivel').style.display = nivel ? '' : 'none';
+  $('lbl-unidade').textContent = nivel ? 'Cada uso é…' : 'Unidade';
+  $('m-Unidade').setAttribute('list', nivel ? 'dl-uso' : 'dl-unidades'); $('m-Unidade').placeholder = nivel ? 'aplicação' : 'comprimidos';
+  $('bloco-restante').style.display = !nivel && editar ? 'block' : 'none';
+  $('dica-contagem').textContent = nivel ? 'Para cremes, pomadas, géis, colírios em frasco… Cada utilização conta como 1 aplicação (ou gotas) e não desconta; o que resta é o nível, que mudas com um toque no cartão.'
+                                         : 'Comprimidos, saquetas, monodoses, ml, sprays com nº de pulverizações… Cada utilização desconta. Xaropes: a quantidade em ml é aproximada.';
+}
+function cancelarEdicao() { limparForm(); mostrar('inventario'); }
 function limparCampo(qual) {
   if (qual === 'validade') { $('m-ValMes').value = ''; $('m-ValAno').value = ''; $('m-Validade').value = ''; }
   if (qual === 'abertura') $('m-DataAbertura').value = '';
@@ -1154,7 +1221,8 @@ function guardarMed() {
   if (novo) { delete d.ID; delete d.Restante; }
   const local = novo
     ? (D => { const m = Object.assign({ ID: 'tmp' + Date.now(), Estado: 'Disponível', CriadoEm: hojeISO(), Codigo: '' }, d);
-              if (temNum(m.Quantidade)) m.Restante = m.Quantidade; m.ValidadeReal = calcValidadeReal(m); D.inventario.push(m); })
+              if (porNivel(m)) { m.Quantidade = ''; m.Restante = ''; m.Nivel = m.Nivel || 'Cheio'; } else { m.Nivel = ''; if (temNum(m.Quantidade)) m.Restante = m.Quantidade; }
+              m.ValidadeReal = calcValidadeReal(m); D.inventario.push(m); })
     : alterarLocal(d.ID, d);
   aviso('✅ Guardado'); limparForm(); mostrar('inventario');
   gravar('guardarMed', d, local).then(r => {
@@ -1212,7 +1280,7 @@ function mostrarEtiqueta(id) {
 function fecharEtiqueta() { fecharLeitor(); }
 
 /* ============ USOS ============ */
-function irUsar(id) { mostrar('usos'); $('u-MedID').value = id; $('u-Data').value = hojeISO(); $('u-Quantidade').value = '1'; pessoaDoUso(); infoUso(); $('u-Motivo').focus(); }
+function irUsar(id) { mostrar('usos'); $('det-usar').open = true; setTimeout(() => $('det-usar').scrollIntoView({ block: 'start' }), 50); $('u-MedID').value = id; $('u-Data').value = hojeISO(); $('u-Quantidade').value = '1'; pessoaDoUso(); infoUso(); $('u-Motivo').focus(); }
 /** quem toma: o dono da caixa; se a caixa é da "Família", a última pessoa escolhida */
 function pessoaDoUso() {
   const m = D.inventario.find(x => x.ID === $('u-MedID').value);
@@ -1220,11 +1288,18 @@ function pessoaDoUso() {
   const p = m && m.Pessoa && m.Pessoa !== 'Família' && opcoes.includes(m.Pessoa) ? m.Pessoa : pref.ultimaPessoa;
   if (p && opcoes.includes(p)) $('u-Pessoa').value = p;
 }
+let nivelUso = '';
+function escolherNivelUso(n) {
+  nivelUso = n; document.querySelectorAll('#u-niveis .nv').forEach(b => b.classList.toggle('on', b.textContent === n));
+}
 function infoUso() {
   const m = D.inventario.find(x => x.ID === $('u-MedID').value);
   $('u-abrir').checked = false;
   $('u-abrir').parentElement.style.display = m && !m.DataAbertura ? 'flex' : 'none';
-  $('u-qtd-label').textContent = 'Quantidade tomada' + (m && m.Unidade ? ' (' + m.Unidade + ')' : '');
+  const nivel = porNivel(m);
+  $('u-qtd-label').textContent = (nivel ? 'Quantas vezes' : 'Quantidade tomada') + (m && m.Unidade ? ' (' + m.Unidade + ')' : '');
+  $('u-nivel-bloco').style.display = nivel ? 'block' : 'none';
+  if (nivel) { nivelUso = ''; $('u-niveis').innerHTML = botoesNivel(m.Nivel || 'Cheio', "escolherNivelUso('§')"); }
   $('u-info').innerHTML = m ? (m.ComoTomar ? `<div style="font-size:14px;color:#202124;background:#fef7e0;border-radius:6px;padding:6px 8px;margin:4px 0">💊 ${esc(m.ComoTomar)}${m.ReceitadoPor ? '<br><span class="sub">🩺 ' + esc(m.ReceitadoPor) + '</span>' : ''}</div>` : '') +
     [textoQtd(m) ? '📦 Resta: ' + textoQtd(m) : '', m.Local ? '📍 ' + esc(m.Local) : '', m.ValidadeReal ? '📅 ' + fmt(m.ValidadeReal) : ''].filter(Boolean).join(' · ') : '';
 }
@@ -1233,6 +1308,9 @@ async function registarUso() {
   pref.ultimaPessoa = $('u-Pessoa').value; guardarPref();
   const d = { MedID: $('u-MedID').value, Pessoa: $('u-Pessoa').value, Data: $('u-Data').value || hojeISO(), Motivo: $('u-Motivo').value.trim(),
               Notas: $('u-Notas').value.trim(), Quantidade: $('u-Quantidade').value.trim(), marcarAberto: $('u-abrir').checked };
+  const mm = D.inventario.find(x => x.ID === d.MedID);
+  const novoNivel = porNivel(mm) && nivelUso && nivelUso !== mm.Nivel ? nivelUso : '';
+  if (novoNivel) d.Nivel = novoNivel;
   if (!d.MedID) { aviso('Escolhe o medicamento'); return; }
   const m = D.inventario.find(x => x.ID === d.MedID);
   let resta = m ? restante(m) : null;
@@ -1240,11 +1318,12 @@ async function registarUso() {
   const abriu = d.marcarAberto && m && !m.DataAbertura;
   gravar('registarUso', d, D => {
     D.utilizacoes.push({ Data: d.Data, Pessoa: d.Pessoa, MedID: d.MedID, Medicamento: m ? m.Nome : '', Motivo: d.Motivo, Notas: d.Notas, Quantidade: d.Quantidade });
-    const mud = {}; if (resta != null && temNum(d.Quantidade)) mud.Restante = resta; if (abriu) mud.DataAbertura = d.Data;
+    const mud = {}; if (resta != null && temNum(d.Quantidade)) mud.Restante = resta; if (abriu) mud.DataAbertura = d.Data; if (novoNivel) mud.Nivel = novoNivel;
     alterarLocal(d.MedID, mud)(D);
   }).catch(() => {});
   $('u-Motivo').value = ''; $('u-Notas').value = ''; $('u-Quantidade').value = '1';
   if (abriu) mostrarEtiqueta(d.MedID);
+  if (novoNivel === 'Vazio') { perguntarVazio(d.MedID); return; }
   if (resta === 0 && confirm('A embalagem acabou. Marcar como terminada?')) {
     gravar('mudarEstado', { ID: d.MedID, Estado: 'Terminado' }, alterarLocal(d.MedID, { Estado: 'Terminado' })).catch(() => {});
   } else aviso('✅ Registado' + (resta != null ? ' · restam ' + resta : ''));
