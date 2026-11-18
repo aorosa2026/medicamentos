@@ -47,6 +47,9 @@
   .vazio { text-align:center; color:var(--cinza); padding:30px 10px; }
   .dica { font-size:12px; color:var(--cinza); margin-top:4px; }
   .segredo { -webkit-text-security:disc; }
+  .cruz { color:#188038; font-weight:900; }
+  #form-med:not(.f-socorros) .so-socorros { display:none !important; }
+  #form-med.f-socorros .so-med { display:none !important; }
   .niveis { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
   .nv { border:1px solid #dadce0; background:#fff; color:#3c4043; border-radius:14px; padding:4px 9px; font-size:12px; }
   .nv.on { color:#fff; border-color:transparent; font-weight:600; }
@@ -89,6 +92,7 @@
     <div class="seg" id="seg-tipo">
       <button class="ativo" data-t="med" onclick="mudarTipo('med')">💊 Medicamentos</button>
       <button data-t="homeo" onclick="mudarTipo('homeo')">🌿 Homeopáticos</button>
+      <button data-t="socorros" onclick="mudarTipo('socorros')"><span class="cruz">✚</span> Socorros</button>
     </div>
     <div class="resumo">
       <div onclick="filtrar('Disponível')"><b id="r-total">–</b>disponíveis</div>
@@ -150,14 +154,19 @@
       <label>…ou cola aqui o código lido</label>
       <input id="m-codigo" placeholder="0105600…" onchange="aplicarCodigo(this.value)">
     </div>
-    <div class="cartao">
+    <div class="cartao" id="form-med">
+      <div class="seg" id="seg-tipo-form">
+        <button type="button" data-t="med" onclick="mudarTipoForm('med')">💊 Medicamento</button>
+        <button type="button" data-t="homeo" onclick="mudarTipoForm('homeo')">🌿 Homeopático</button>
+        <button type="button" data-t="socorros" onclick="mudarTipoForm('socorros')"><span class="cruz">✚</span> Socorros</button>
+      </div>
       <input type="hidden" id="m-ID"><input type="hidden" id="m-Codigo">
       <div id="f-codigo" class="linha" style="display:none;justify-content:space-between;margin-bottom:4px"><span class="sub">Código desta caixa</span><span class="codigo" id="f-codigo-txt"></span></div>
-      <label>Pessoa</label><select id="m-Pessoa"></select>
-      <label>Nome do medicamento *</label><input id="m-Nome" class="limpavel" list="dl-nomes" placeholder="ex.: Ben-u-ron">
+      <div class="so-med"><label>Pessoa</label><select id="m-Pessoa"></select></div>
+      <label id="lbl-nome">Nome do medicamento *</label><input id="m-Nome" class="limpavel" list="dl-nomes" placeholder="ex.: Ben-u-ron">
       <datalist id="dl-nomes"></datalist>
-      <label>Substância ativa</label><input id="m-Substancia" placeholder="ex.: Paracetamol">
-      <div class="duas">
+      <div class="so-med"><label>Substância ativa</label><input id="m-Substancia" placeholder="ex.: Paracetamol"></div>
+      <div class="duas so-med">
         <div><label>Dosagem</label><input id="m-Dosagem" placeholder="500 mg"></div>
         <div><label>Forma</label><input id="m-Forma" list="dl-formas" placeholder="Comprimido"></div>
       </div>
@@ -167,6 +176,8 @@
       <input type="hidden" id="m-Validade">
       <label>Local</label><input id="m-Local" list="dl-locais" placeholder="Armário WC">
       <datalist id="dl-locais"></datalist>
+      <div id="bloco-copias"><label>Quantas caixas iguais?</label><input type="number" min="1" max="20" id="m-Copias" value="1">
+        <div class="dica">Cada caixa fica com o seu código (M####).</div></div>
       <label>Data de abertura</label>
       <div class="linha" style="flex-wrap:nowrap;gap:6px"><input type="date" id="m-DataAbertura" style="flex:1;min-width:0"><button type="button" class="xcampo" title="Apagar data de abertura" onclick="limparCampo('abertura')">✕</button></div>
       <label>Dura depois de aberto</label>
@@ -175,11 +186,12 @@
       <div class="dica">O prazo depois de aberto vem no folheto ou na caixa. Deixa vazio se não se aplicar.</div>
       <label>Contagem</label>
       <div class="seg" id="seg-contagem" style="margin-bottom:0">
-        <button type="button" data-c="" onclick="mudarContagem('')">🔢 Contado</button>
-        <button type="button" data-c="nivel" onclick="mudarContagem('nivel')">🧴 Por aplicação</button>
+        <button type="button" data-c="" class="so-med" onclick="mudarContagem('')">🔢 Contado</button>
+        <button type="button" data-c="caixa" class="so-socorros" onclick="mudarContagem('caixa')">📦 Por caixa</button>
+        <button type="button" data-c="nivel" onclick="mudarContagem('nivel')"><span class="so-med">🧴 Por aplicação</span><span class="so-socorros">🧴 Frasco (nível)</span></button>
       </div>
       <input type="hidden" id="m-Contagem">
-      <div class="duas">
+      <div class="duas" id="duas-contagem">
         <div id="cel-qtd"><label>Quantidade na embalagem</label><input type="number" min="0" step="any" id="m-Quantidade" placeholder="ex.: 20"></div>
         <div id="cel-nivel" style="display:none"><label>Nível</label><select id="m-Nivel"><option>Cheio</option><option>Meio</option><option>Quase no fim</option><option>Vazio</option></select></div>
         <div><label id="lbl-unidade">Unidade</label><input id="m-Unidade" list="dl-unidades" placeholder="comprimidos"></div>
@@ -189,24 +201,26 @@
       <div id="bloco-restante" style="display:none"><label>Ainda resta (corrige se for preciso)</label><input type="number" min="0" step="any" id="m-Restante"></div>
       <div class="dica" id="dica-contagem">Xaropes e gotas: a quantidade em ml é sempre aproximada.</div>
       <input type="hidden" id="m-Serie">
-      <div class="duas">
+      <div class="duas so-med">
         <div><label>Nº registo</label><input id="m-NRegisto" inputmode="numeric"></div>
         <div><label>Lote</label><input id="m-Lote"></div>
       </div>
       <input type="hidden" id="m-GTIN">
-      <label class="tick"><input type="checkbox" id="m-Homeopatico"> 🌿 Homeopático</label>
-      <label class="tick"><input type="checkbox" id="m-Receita"> ℞ Obrigatório ter receita</label>
+      <input type="checkbox" id="m-Homeopatico" hidden><input type="checkbox" id="m-Socorros" hidden>
+      <label class="tick so-med"><input type="checkbox" id="m-Receita"> ℞ Obrigatório ter receita</label>
       <label>🎯 Para que serve</label><input id="m-Indicacoes" placeholder="ex.: febre, dores, dor de garganta">
+      <div class="so-med">
       <label>💊 Como tomar</label><textarea id="m-ComoTomar" placeholder="ex.: 5 ml de 8 em 8 horas, se febre" style="min-height:48px"></textarea>
       <label>🩺 Receitado por</label><input id="m-ReceitadoPor" list="dl-receitado" placeholder="ex.: Dra. Silva (pediatra)">
       <datalist id="dl-receitado"></datalist>
-      <div class="dica">Homeopático, receita, para que serve, como tomar e receitado por passam automaticamente para a próxima caixa do mesmo medicamento (podes editar ou apagar).</div>
+      </div>
+      <div class="dica">O tipo, a contagem, para que serve, como tomar e receitado por passam automaticamente para a próxima caixa do mesmo produto (podes editar ou apagar).</div>
       <label>Notas (só desta caixa)</label><textarea id="m-Notas" placeholder="ex.: está no carro"></textarea>
       <div class="acoes"><button class="btn" id="b-guardar" onclick="guardarMed()">Guardar</button>
         <button class="btn sec" onclick="cancelarEdicao()">Cancelar</button></div>
       <div id="bloco-apagar" style="display:none;margin-top:18px;border-top:1px solid #eee;padding-top:12px">
         <button class="btn perigo peq" onclick="apagarDefinitivo()">🗑️ Apagar registo definitivamente</button>
-        <div class="dica">Só para enganos: apaga a caixa e as utilizações dela do Sheet. Para caixas que deitaste fora, usa antes "🗑️ Fora".</div>
+        <div class="dica">Só para enganos: apaga a caixa e as utilizações dela do Sheet. Para caixas que deitaste fora, usa antes "🗑️ Retirar".</div>
       </div>
     </div>
   </section>
@@ -305,6 +319,17 @@
         <button class="btn" onclick="guardarConfig()">Guardar e testar</button>
         <button class="btn perigo" onclick="esquecerConfig()">Esquecer neste telemóvel</button>
       </div>
+    </div>
+    <div class="cartao">
+      <h3>Separadores</h3>
+      <div class="dica" style="margin-top:0">Desliga o que não usas. Os dados não se apagam.</div>
+      <label class="tick"><input type="checkbox" id="c-on-med" onchange="mudarOn('med', this.checked)"> 💊 Medicamentos</label>
+      <label class="tick"><input type="checkbox" id="c-on-homeo" onchange="mudarOn('homeo', this.checked)"> 🌿 Homeopáticos</label>
+      <label class="tick"><input type="checkbox" id="c-on-socorros" onchange="mudarOn('socorros', this.checked)"> <span class="cruz">✚</span> Primeiros socorros</label>
+    </div>
+    <div class="cartao" style="padding-top:2px;padding-bottom:2px">
+      <details class="abre"><summary style="border-top:0"><span>📍 Locais (corrigir nomes)</span></summary><div id="lista-locais" style="padding-bottom:8px"></div></details>
+      <details class="abre"><summary><span>✏️ Nomes dos produtos (corrigir / juntar)</span></summary><div id="lista-nomes" style="padding-bottom:8px"></div></details>
     </div>
     <div class="cartao">
       <h3>Inventário</h3>
@@ -416,7 +441,7 @@ let cfg = {};
 try { cfg = JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { cfg = {}; }
 let D = VAZIO();
 const LS_PREF = 'medicamentos_pref_v1';
-const abertos = { usos: false, med: false, homeo: false };
+const abertos = { usos: false, med: false, homeo: false, socorros: false };
 let pref = { antigos: false, tipo: 'med', som: true };
 try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(LS_PREF) || '{}')); } catch (e) {}
 const guardarPref = () => { try { localStorage.setItem(LS_PREF, JSON.stringify(pref)); } catch (e) {} };
@@ -521,6 +546,8 @@ function mostrar(e) {
   window.scrollTo(0, 0);
   if (e === 'def') { $('c-url').value = cfg.url || ''; $('c-key').value = cfg.key || ''; }
   if (e === 'usos' && !$('u-Data').value) { $('u-Data').value = hojeISO(); infoUso(); }
+  // formulário vazio: começa no tipo do separador escolhido no Inventário
+  if (e === 'adicionar' && !$('m-ID').value && !$('m-Nome').value && tipoForm() !== pref.tipo) limparForm();
 }
 
 /* ============ ESTADO DE VALIDADE E QUANTIDADE ============ */
@@ -546,7 +573,8 @@ function estadoValidade(m) {
 const NIVEIS = ['Cheio', 'Meio', 'Quase no fim', 'Vazio'];
 const porNivel = m => m && m.Contagem === 'nivel';
 // caixa com quantidade mas sem "resta" registado = cheia
-const restante = m => porNivel(m) ? null : temNum(m.Restante) ? Number(m.Restante) : temNum(m.Quantidade) ? Number(m.Quantidade) : null;
+const porCaixa = m => m && m.Contagem === 'caixa';
+const restante = m => porNivel(m) || porCaixa(m) ? null : temNum(m.Restante) ? Number(m.Restante) : temNum(m.Quantidade) ? Number(m.Quantidade) : null;
 function aAcabar(m) {
   if (porNivel(m)) return m.Nivel === 'Quase no fim';
   const r = restante(m), q = Number(m.Quantidade);
@@ -581,6 +609,25 @@ function perguntarVazio(id) {
 }
 
 /* ============ DESENHAR ============ */
+function desenharRenomear() {
+  const conta = campo => { const c = {}; D.inventario.forEach(m => { const v = String(m[campo] || '').trim(); if (v) c[v] = (c[v] || 0) + 1; }); return Object.entries(c).sort((a, b) => a[0].localeCompare(b[0], 'pt')); };
+  const lista = (campo, vazio) => { const l = conta(campo); return l.length ? l.map(([v, n]) => `<div class="linha" style="border-top:1px solid #eee;padding:6px 0">
+      <span style="flex:1">${esc(v)} <span class="sub">(${n})</span></span>
+      <button class="btn sec peq" data-v="${esc(v)}" onclick="renomear('${campo}', this.dataset.v)">✏️ Renomear</button></div>`).join('') : `<div class="sub">${vazio}</div>`; };
+  $('lista-locais').innerHTML = '<div class="dica" style="margin-top:0">Corrige um local e muda em todas as caixas. Para juntar dois, renomeia um com o nome do outro.</div>' + lista('Local', 'Ainda não há locais.');
+  $('lista-nomes').innerHTML = '<div class="dica" style="margin-top:0">Muda o nome em todas as caixas, no catálogo, nos tratamentos e nas utilizações. Para juntar nomes escritos de formas diferentes, renomeia um com o nome do outro.</div>' + lista('Nome', 'Ainda não há produtos.');
+}
+function renomear(campo, de) {
+  const para = prompt(`Novo nome para "${de}":`, de);
+  if (para === null || !para.trim() || para.trim() === de) return;
+  const nv = para.trim(), n = s => String(s || '').trim().toLowerCase();
+  gravar('renomear', { campo, de, para: nv }, D => {
+    D.inventario.forEach(m => { if (n(m[campo]) === n(de)) m[campo] = nv; });
+    if (campo === 'Nome') { D.catalogo.forEach(c => { if (n(c.Nome) === n(de)) c.Nome = nv; }); (D.tratamentos || []).forEach(t => { if (n(t.Nome) === n(de)) t.Nome = nv; });
+      D.utilizacoes.forEach(u => { if (n(u.Medicamento) === n(de)) u.Medicamento = nv; }); }
+  }).catch(() => {});
+  aviso('✅ "' + de + '" → "' + nv + '"');
+}
 function desenharTudo() {
   const nomes = D.pessoas.map(p => p.Nome);
   const opcoesPessoa = ['Família'].concat(nomes);
@@ -593,6 +640,7 @@ function desenharTudo() {
   $('dl-locais').innerHTML = unicos(D.inventario.map(m => m.Local)).map(n => `<option>${esc(n)}</option>`).join('');
   $('dl-receitado').innerHTML = unicos(D.inventario.map(m => m.ReceitadoPor)).map(n => `<option>${esc(n)}</option>`).join('');
   $('dl-motivos').innerHTML = unicos(D.utilizacoes.map(u => u.Motivo)).map(n => `<option>${esc(n)}</option>`).join('');
+  desenharRenomear();
   $('lista-pessoas').innerHTML = D.pessoas.length
     ? D.pessoas.map(p => `• <b>${esc(p.Nome)}</b>${p.Notas ? ' — ' + esc(p.Notas) : ''}`).join('<br>')
     : 'Ainda não há pessoas. Adiciona em baixo.';
@@ -605,8 +653,28 @@ function motivosPorMed() {
   return r;
 }
 
-const eHomeo = m => m.Homeopatico === 'Sim' || m.Homeopatico === true;
-const doTipo = m => pref.tipo === 'homeo' ? eHomeo(m) : !eHomeo(m);
+const eSocorros = m => !!m && (m.Socorros === 'Sim' || m.Socorros === true);
+const eHomeo = m => !eSocorros(m) && (m.Homeopatico === 'Sim' || m.Homeopatico === true);
+const tipoDe = m => eSocorros(m) ? 'socorros' : eHomeo(m) ? 'homeo' : 'med';
+const doTipo = m => tipoDe(m) === pref.tipo;
+const TIPOS = ['med', 'homeo', 'socorros'];
+const ligado = t => !pref.on || pref.on[t] !== false;
+function mudarOn(t, on) {
+  pref.on = Object.assign({ med: true, homeo: true, socorros: true }, pref.on || {}); pref.on[t] = on;
+  if (!TIPOS.some(ligado)) { pref.on[t] = true; aviso('Tem de ficar pelo menos um ligado.'); }
+  if (!ligado(pref.tipo)) pref.tipo = TIPOS.find(ligado);
+  guardarPref(); desenharTudo();
+}
+function aplicarSeparadores() {
+  TIPOS.forEach(t => {
+    const b = document.querySelector(`#seg-tipo button[data-t="${t}"]`); if (b) b.style.display = ligado(t) ? '' : 'none';
+    const f = document.querySelector(`#seg-tipo-form button[data-t="${t}"]`); if (f) f.style.display = ligado(t) ? '' : 'none';
+    if ($('c-on-' + t)) $('c-on-' + t).checked = ligado(t);
+  });
+  $('seg-tipo').style.display = TIPOS.filter(ligado).length > 1 ? '' : 'none';
+  $('seg-tipo-form').style.display = TIPOS.filter(ligado).length > 1 ? '' : 'none';
+  if (!ligado(pref.tipo)) pref.tipo = TIPOS.find(ligado);
+}
 // "12", "m12", "M0012" → nº 12
 const numCodigo = t => { const x = String(t || '').trim().match(/^m?0*(\d+)$/i); return x ? +x[1] : null; };
 function mudarTipo(t) { pref.tipo = t; guardarPref(); document.querySelectorAll('#seg-tipo button').forEach(b => b.classList.toggle('ativo', b.dataset.t === t)); desenharInventario(); }
@@ -623,6 +691,7 @@ function desenharInventario() {
   $('f-estado').value = OPC.some(o => o[0] === vAtual) ? vAtual : 'Disponível';
   if ($('f-texto')._ver) $('f-texto')._ver();
   $('c-antigos').checked = !!pref.antigos; $('c-som').checked = pref.som !== false;
+  aplicarSeparadores();
   document.querySelectorAll('#seg-tipo button').forEach(b => b.classList.toggle('ativo', b.dataset.t === pref.tipo));
   const disp = D.inventario.filter(m => m.Estado === 'Disponível' && doTipo(m));
   $('r-total').textContent = disp.length;
@@ -660,11 +729,11 @@ function desenharInventario() {
   }).sort(ordemInventario);
 
   $('lista').innerHTML = l.length ? l.map(m => cartaoMed(m, mot)).join('')
-    : `<div class="vazio">Nada para mostrar.<br>${pref.tipo === 'homeo' ? 'Para registar um homeopático, marca "🌿 Homeopático" no ➕ Adicionar.' : 'Usa ➕ para adicionar medicamentos.'}</div>`;
+    : `<div class="vazio">Nada para mostrar.<br>Usa ➕ Adicionar${pref.tipo === 'homeo' ? ' e escolhe 🌿 Homeopático' : pref.tipo === 'socorros' ? ' e escolhe ✚ Socorros' : ''}.</div>`;
   atualizarSelectUso();
 }
 function atualizarSelectUso() {
-  const disp = D.inventario.filter(m => m.Estado === 'Disponível');
+  const disp = D.inventario.filter(m => m.Estado === 'Disponível' && !eSocorros(m));
   const sel = $('u-MedID').value;
   $('u-MedID').innerHTML = disp.slice().sort((a, b) => (expirada(a) - expirada(b)) || String(a.Nome).localeCompare(b.Nome, 'pt') || ordemUsar(a, b))
     .map(m => `<option value="${esc(m.ID)}">${expirada(m) ? '❌ ' : aberta(m) ? '📂 ' : ''}${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''} (${esc(m.Pessoa || '—')})${m.Codigo ? ' · ' + esc(m.Codigo) : ''}${m.ValidadeReal ? ' · val. ' + fmt(m.ValidadeReal) : ''}</option>`).join('');
@@ -679,15 +748,15 @@ function cartaoMed(m, mot) {
   const abertaDisp = m.DataAbertura && m.Estado === 'Disponível';
   return `<div class="cartao${abertaDisp ? ' aberta' : ''}" id="c-${esc(m.ID)}">
     <div class="linha" style="justify-content:space-between">
-      <h3>${eHomeo(m) ? '🌿 ' : ''}${esc(m.Nome)} ${m.Dosagem ? '<span class="sub">' + esc(m.Dosagem) + '</span>' : ''}${m.Receita === 'Sim' ? ' <span class="badge neutro" title="Receita obrigatória">℞</span>' : ''}</h3>
+      <h3>${eHomeo(m) ? '🌿 ' : eSocorros(m) ? '<span class="cruz">✚</span> ' : ''}${esc(m.Nome)} ${m.Dosagem ? '<span class="sub">' + esc(m.Dosagem) + '</span>' : ''}${m.Receita === 'Sim' ? ' <span class="badge neutro" title="Receita obrigatória">℞</span>' : ''}</h3>
       <span>${m.Estado === 'Disponível' ? `<span class="badge ${ev.cls}">${ev.txt}</span>` : `<span class="badge neutro">${m.Estado === 'Terminado' ? 'Terminada' : 'Retirada'}</span>`}
       ${abertaDisp ? '<span class="badge abertab">📂 Aberta</span>' : ''}
       ${m.Estado === 'Disponível' && aAcabar(m) ? '<span class="badge aviso">A acabar</span>' : ''}</span>
     </div>
-    <div class="sub">${m.Codigo ? '<span class="codigo">' + esc(m.Codigo) + '</span> ' : ''}${esc(m.Substancia || '—')}${m.Forma ? ' · ' + esc(m.Forma) : ''}</div>
+    <div class="sub">${m.Codigo ? '<span class="codigo">' + esc(m.Codigo) + '</span> ' : ''}${eSocorros(m) ? (m.Contagem === 'caixa' ? '📦 1 caixa' : '') : esc(m.Substancia || '—') + (m.Forma ? ' · ' + esc(m.Forma) : '')}</div>
     ${m.Indicacoes ? `<div class="sub">🎯 ${esc(m.Indicacoes)}</div>` : ''}
-    <div class="sub">👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}</div>
-    <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || '—'}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
+    ${eSocorros(m) ? (m.Local ? `<div class="sub">📍 ${esc(m.Local)}</div>` : '') : `<div class="sub">👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}</div>`}
+    <div class="sub">📅 Validade: ${fmt(m.ValidadeReal) || (eSocorros(m) ? 'sem validade' : '—')}${m.DataAbertura ? ' · aberto a ' + fmt(m.DataAbertura) + (textoPrazo(m) ? ' (dura ' + textoPrazo(m) + ')' : '') : ''}</div>
     ${porNivel(m) && m.Estado === 'Disponível' ? `<div class="sub">🧴 Nível:</div><div class="niveis">${botoesNivel(m.Nivel || 'Cheio', `setNivel('${esc(m.ID)}', '§')`)}</div>`
       : qtd ? `<div class="sub">📦 Resta: ${qtd}</div>` : ''}
     ${motivos.length ? `<div class="sub">💬 Usado para: ${esc(motivos.join(', '))}</div>` : ''}
@@ -696,11 +765,11 @@ function cartaoMed(m, mot) {
     ${m.Notas ? `<div class="sub">📝 ${esc(m.Notas)}</div>` : ''}
     <div class="acoes">
       ${m.Estado === 'Disponível' ? `
-        <button class="btn sec peq" onclick="irUsar('${esc(m.ID)}')">📝 Usar</button>
+        ${eSocorros(m) ? '' : `<button class="btn sec peq" onclick="irUsar('${esc(m.ID)}')">📝 Usar</button>`}
         ${!m.DataAbertura ? `<button class="btn sec peq" onclick="abrirMed('${esc(m.ID)}')">📂 Abri hoje</button>` : ''}
         <button class="btn sec peq" onclick="editar('${esc(m.ID)}')">✏️ Editar</button>
         <button class="btn sec peq" onclick="duplicar('${esc(m.ID)}')">➕ Outra igual</button>
-        <button class="btn sec peq" onclick="mostrar('usos'); novoTratamento('${esc(m.ID)}')">⏰ Tratamento</button>
+        ${eSocorros(m) ? '' : `<button class="btn sec peq" onclick="mostrar('usos'); novoTratamento('${esc(m.ID)}')">⏰ Tratamento</button>`}
         <button class="btn perigo peq" onclick="estado('${esc(m.ID)}','Deitado fora')">🗑️ Retirar</button>`
       : `<button class="btn sec peq" onclick="estado('${esc(m.ID)}','Disponível')">Repor</button>`}
     </div></div>`;
@@ -759,8 +828,8 @@ function desenharStock() {
   // stock agrupado por nome
   const g = {}, ordem = { exp: 0, aviso: 1, ok: 2 };
   D.inventario.filter(m => m.Estado === 'Disponível').forEach(m => {
-    const k = (eHomeo(m) ? 'h:' : 'm:') + norm(m.Nome);
-    const x = g[k] = g[k] || { nome: m.Nome, homeo: eHomeo(m), subst: m.Substancia, caixas: 0, validas: 0, total: 0, temQtd: false, unidade: m.Unidade, prox: '', pior: 'ok', acabar: 0 };
+    const k = tipoDe(m) + ':' + norm(m.Nome);
+    const x = g[k] = g[k] || { nome: m.Nome, tipo: tipoDe(m), subst: m.Substancia, caixas: 0, validas: 0, total: 0, temQtd: false, unidade: m.Unidade, prox: '', pior: 'ok', acabar: 0 };
     x.caixas++;
     const ev = estadoValidade(m).cls; if (ev !== 'neutro' && ordem[ev] < ordem[x.pior]) x.pior = ev;
     if (valida(m, hoje)) { x.validas++; if (aAcabar(m)) x.acabar++; const r = restante(m); if (r != null) { x.total += r; x.temQtd = true; }
@@ -772,13 +841,14 @@ function desenharStock() {
       <div class="linha" style="justify-content:space-between"><b>${esc(x.nome)}</b>
       <span class="badge ${cor(x)}">${x.validas} caixa(s)${x.caixas > x.validas ? ' + ' + (x.caixas - x.validas) + ' expirada(s)' : ''}</span></div>
       <div class="sub">${[esc(x.subst || ''), x.temQtd ? 'total ' + Math.round(x.total * 100) / 100 + ' ' + esc(x.unidade || '') : '', x.prox ? 'próxima validade ' + fmt(x.prox) : ''].filter(Boolean).join(' · ')}</div>
-      <button class="btn sec peq" style="margin-top:4px" data-n="${esc(x.nome)}" data-h="${x.homeo ? 1 : ''}" onclick="verCaixas(this.dataset.n, !!this.dataset.h)">Ver caixas</button></div>`).join('') + '</details>' : '';
+      <button class="btn sec peq" style="margin-top:4px" data-n="${esc(x.nome)}" data-t="${x.tipo}" onclick="verCaixas(this.dataset.n, this.dataset.t)">Ver caixas</button></div>`).join('') + '</details>' : '';
   const l = Object.values(g).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
-  $('stock').innerHTML = (bloco('💊 Medicamentos', l.filter(x => !x.homeo), 'med') + bloco('🌿 Homeopáticos', l.filter(x => x.homeo), 'homeo'))
+  $('stock').innerHTML = ((ligado('med') ? bloco('💊 Medicamentos', l.filter(x => x.tipo === 'med'), 'med') : '') + (ligado('homeo') ? bloco('🌿 Homeopáticos', l.filter(x => x.tipo === 'homeo'), 'homeo') : '')
+    + (ligado('socorros') ? bloco('<span class="cruz">✚</span> Primeiros socorros', l.filter(x => x.tipo === 'socorros'), 'socorros') : ''))
     || '<div class="sub">Sem medicamentos disponíveis.</div>';
 }
-function verCaixas(nome, homeo) {
-  pref.tipo = homeo ? 'homeo' : 'med'; guardarPref();
+function verCaixas(nome, tipo) {
+  pref.tipo = tipo || 'med'; guardarPref();
   mostrar('inventario'); $('f-estado').value = 'Disponível'; $('f-pessoa').value = ''; $('f-texto').value = nome; desenharInventario();
 }
 function editarRegular(nome) {
@@ -802,7 +872,7 @@ const H = 3600000;
 const hhmm = d => d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 const localInput = d => { const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return x.toISOString().slice(0, 16); };
 const ativos = () => (D.tratamentos || []).filter(t => t.Ativo !== 'Não');
-function fimDe(t) { if (!t.Fim) return null; const [y, m, d] = String(t.Fim).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d, 23, 59, 59).getTime(); }
+function fimDe(t) { if (!t.Fim) return null; const s = String(t.Fim); if (s.length > 10) return new Date(s).getTime(); const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d, 23, 59, 59).getTime(); }
 /** horas das tomas de um tratamento entre "de" e "ate" (ms) */
 function tomasEntre(t, de, ate) {
   const ini = new Date(t.Inicio).getTime(), h = Number(t.IntervaloHoras) * H, fim = fimDe(t), out = [];
@@ -819,24 +889,38 @@ function tomaFeita(t, ms) {
 const descTrat = t => `${t.Dose !== '' && t.Dose != null ? t.Dose + ' ' + (t.Unidade || '') + ' · ' : ''}${Number(t.IntervaloHoras) === 24 ? '1× por dia' : Number(t.IntervaloHoras) % 24 === 0 ? 'de ' + Number(t.IntervaloHoras) / 24 + ' em ' + Number(t.IntervaloHoras) / 24 + ' dias' : 'de ' + t.IntervaloHoras + ' em ' + t.IntervaloHoras + ' h'}`;
 
 function textoAteFim(t) {
-  const m = D.inventario.find(x => x.ID === t.MedID), r = m ? restante(m) : null, d = Number(t.Dose);
-  return r != null && d > 0 ? `📦 até acabar a caixa (faltam ${Math.ceil(r / d - 1e-9)} toma(s))` : '📦 até acabar a caixa';
+  const fim = fimDe(t), faltam = fim ? tomasEntre(t, Date.now() - 30 * 60000, fim).length : null;
+  return '📦 até acabar a caixa' + (fim ? ` · última toma ${new Date(fim).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') +
+    (faltam != null ? ` (faltam ${faltam})` : '');
 }
+const codigoCaixa = t => { const m = D.inventario.find(x => x.ID === t.MedID); return m && m.Codigo ? `<span class="codigo">${esc(m.Codigo)}</span> ` : ''; };
+const dataFim = t => { const f = fimDe(t); return f ? new Date(f).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' }) : ''; };
 function desenharTratamentos() {
   const agora = Date.now(), d0 = new Date(); d0.setHours(0, 0, 0, 0);
   const iniDia = d0.getTime(), fimDia = iniDia + 24 * H - 1;
-  // --- Hoje ---
+  // --- Hoje (+ tomas de ontem que ficaram por resolver) ---
   const linhas = [];
-  ativos().forEach(t => tomasEntre(t, iniDia, fimDia).forEach(ms => linhas.push({ t, ms, feita: tomaFeita(t, ms) })));
+  ativos().forEach(t => {
+    tomasEntre(t, iniDia - 24 * H, iniDia - 1).forEach(ms => { if (!tomaFeita(t, ms)) linhas.push({ t, ms, ontem: true }); });
+    tomasEntre(t, iniDia, fimDia).forEach(ms => linhas.push({ t, ms, feita: tomaFeita(t, ms) }));
+  });
   linhas.sort((a, b) => a.ms - b.ms);
-  const proxima = linhas.find(l => !l.feita && l.ms >= agora - 30 * 60000);
+  const proxima = linhas.find(l => !l.feita && !l.ontem && l.ms >= agora - 30 * 60000);
   $('hoje').innerHTML = linhas.length ? linhas.map(l => {
-    const atrasada = !l.feita && l.ms < agora - 30 * 60000, eProx = l === proxima;
-    return `<div class="linha" style="border-top:1px solid #eee;padding:8px 0;${eProx ? 'background:#fef7e0;margin:0 -8px;padding:8px;border-radius:8px' : ''}">
-      <b style="font-size:17px;width:52px">${hhmm(new Date(l.ms))}</b>
-      <span style="flex:1"><b>${esc(l.t.Nome)}</b> <span class="sub">${esc(l.t.Pessoa || '')}${l.t.Dose !== '' ? ' · ' + esc(l.t.Dose + ' ' + (l.t.Unidade || '')) : ''}</span>
-        ${l.feita ? `<br><span class="sub" style="color:var(--verde)">✅ tomada às ${hhmm(new Date(l.feita.TomadaEm))}</span>` : atrasada ? '<br><span class="sub" style="color:var(--vermelho)">🔴 por tomar (atrasada)</span>' : ''}</span>
-      ${l.feita ? '' : `<button class="btn ${eProx || atrasada ? '' : 'sec'} peq" onclick="tomarDose('${esc(l.t.ID)}', ${l.ms})">✅ Tomei</button>`}
+    const atrasada = !l.feita && l.ms < agora - 30 * 60000, eProx = l === proxima, id = esc(l.t.ID);
+    const estado = !l.feita ? '' : l.feita.Estado === 'Compensada' ? '<span class="sub">↻ falhou · compensada (+1 toma no fim)</span>'
+      : l.feita.Estado === 'Ignorada' ? '<span class="sub">✕ falhou · ignorada</span>'
+      : `<span class="sub" style="color:var(--verde)">✅ tomada às ${hhmm(new Date(l.feita.TomadaEm))}</span> <button class="nv" onclick="corrigirHora('${id}', ${l.ms})">✏️ hora</button>`;
+    return `<div style="border-top:1px solid #eee;padding:8px 0;${eProx ? 'background:#fef7e0;margin:0 -8px;padding:8px;border-radius:8px' : ''}">
+      <div class="linha" style="flex-wrap:nowrap">
+        <b style="font-size:16px;min-width:52px">${l.ontem ? '<span class="sub">ontem</span><br>' : ''}${hhmm(new Date(l.ms))}</b>
+        <span style="flex:1">${codigoCaixa(l.t)}<b>${esc(l.t.Nome)}</b> <span class="sub">${esc(l.t.Pessoa || '')}${l.t.Dose !== '' ? ' · ' + esc(l.t.Dose + ' ' + (l.t.Unidade || '')) : ''}</span>
+          ${l.feita ? '<br>' + estado : atrasada ? '<br><span class="sub" style="color:var(--vermelho)">🔴 por tomar (atrasada)</span>' : ''}</span>
+        ${l.feita ? '' : `<button class="btn ${eProx || atrasada ? '' : 'sec'} peq" onclick="tomarDose('${id}', ${l.ms})">✅ Tomei</button>`}
+      </div>
+      ${!l.feita && atrasada ? `<div class="acoes" style="justify-content:flex-end;margin-top:4px">
+        <button class="btn sec peq" onclick="falharDose('${id}', ${l.ms}, true)" title="Não tomou; acrescenta uma toma no fim">↻ Falhou · compensar</button>
+        <button class="btn sec peq" onclick="falharDose('${id}', ${l.ms}, false)" title="Não tomou; a data final mantém-se">✕ Falhou · ignorar</button></div>` : ''}
     </div>`; }).join('')
     : `<div class="sub">${ativos().length ? 'Não há tomas para hoje.' : 'Sem tratamentos a decorrer. Usa ➕ Novo para começar um.'}</div>`;
   // próximas tomas de amanhã em diante (quando hoje já não há)
@@ -848,16 +932,16 @@ function desenharTratamentos() {
   $('lista-trat').innerHTML = ativos().length ? ativos().map(t => {
     const fim = fimDe(t), acabou = fim && fim < agora;
     return `<div style="border-top:1px solid #eee;padding:8px 0">
-      <b>${esc(t.Nome)}</b> <span class="sub">— ${esc(t.Pessoa || '')}</span>
+      ${codigoCaixa(t)}<b>${esc(t.Nome)}</b> <span class="sub">— ${esc(t.Pessoa || '')}</span>
       <div class="sub">${esc(descTrat(t))} · desde ${new Date(t.Inicio).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-        ${t.AteFimCaixa === 'Sim' ? ' · ' + textoAteFim(t) : t.Fim ? ' · até ' + fmt(String(t.Fim).slice(0, 10)) : ' · contínuo'}${t.Motivo ? ' · ' + esc(t.Motivo) : ''}${t.Eventos ? ' · 🔔' : ''}</div>
+        ${t.AteFimCaixa === 'Sim' ? ' · ' + textoAteFim(t) : t.Fim ? ' · até ' + dataFim(t) : ' · contínuo'}${Number(t.Compensadas) ? ' · ↻ ' + Number(t.Compensadas) + ' compensada(s)' : ''}${t.Motivo ? ' · ' + esc(t.Motivo) : ''}${t.Eventos ? ' · 🔔' : ''}</div>
       ${acabou ? '<div class="sub" style="color:var(--verde)">Terminou. Podes arquivá-lo.</div>' : ''}
       <div class="acoes">
         <button class="btn sec peq" onclick="editarTratamento('${esc(t.ID)}')">✏️ Editar</button>
         <button class="btn perigo peq" onclick="terminarTratamento('${esc(t.ID)}')">⏹ ${acabou ? 'Arquivar' : 'Terminar'}</button>
       </div></div>`; }).join('') : '';
   // seletores do formulário
-  const disp = D.inventario.filter(m => m.Estado === 'Disponível' && !expirada(m)).sort((a, b) => String(a.Nome).localeCompare(b.Nome, 'pt') || ordemUsar(a, b));
+  const disp = D.inventario.filter(m => m.Estado === 'Disponível' && !expirada(m) && !eSocorros(m)).sort((a, b) => String(a.Nome).localeCompare(b.Nome, 'pt') || ordemUsar(a, b));
   const sel = $('t-MedID').value;
   $('t-MedID').innerHTML = disp.map(m => `<option value="${esc(m.ID)}">${aberta(m) ? '📂 ' : ''}${esc(m.Nome)}${m.Dosagem ? ' ' + esc(m.Dosagem) : ''}${m.Codigo ? ' · ' + esc(m.Codigo) : ''}</option>`).join('');
   if (sel) $('t-MedID').value = sel;
@@ -921,7 +1005,7 @@ function editarTratamento(id) {
   $('t-ID').value = t.ID; $('t-Pessoa').value = t.Pessoa; $('t-Dose').value = t.Dose; $('t-Motivo').value = t.Motivo || '';
   const h = String(t.IntervaloHoras);
   if ([...$('t-Intervalo').options].some(o => o.value === h)) $('t-Intervalo').value = h; else { $('t-Intervalo').value = 'outro'; $('t-outro').style.display = 'block'; $('t-outro').value = h; }
-  $('t-Inicio').value = localInput(new Date(t.Inicio)); $('t-Fim').value = t.Fim ? String(t.Fim).slice(0, 10) : '';
+  $('t-Inicio').value = localInput(new Date(t.Inicio)); $('t-Fim').value = fimDe(t) ? localInput(new Date(fimDe(t))).slice(0, 10) : '';
   $('t-jaTomei').checked = false; $('t-avisos').checked = true;
   $('t-ateFim').checked = t.AteFimCaixa === 'Sim'; ateFimCaixa();
 }
@@ -968,6 +1052,38 @@ function tomarDose(tratID, ms) {
     else if (r && r.restante === 0) aviso('📦 A caixa de ' + t.Nome + ' acabou. Marca-a como terminada no Inventário.', 6000);
   }).catch(() => {});
   aviso('✅ Toma registada: ' + t.Nome);
+}
+/** Toma falhada: compensar = mais uma toma no fim; ignorar = a data final mantém-se */
+function falharDose(tratID, ms, compensar) {
+  const t = (D.tratamentos || []).find(x => x.ID === tratID); if (!t) return;
+  if (String(tratID).startsWith('tmp')) { aviso('⏳ Ainda a guardar o tratamento… tenta daqui a uns segundos.'); return; }
+  const prev = new Date(ms).toISOString();
+  gravar('falharDose', { TratID: tratID, Prevista: prev, compensar }, D => {
+    D.tomas = (D.tomas || []).concat([{ TratID: tratID, Prevista: prev, TomadaEm: '', MedID: '', Pessoa: t.Pessoa, Estado: compensar ? 'Compensada' : 'Ignorada' }]);
+    const x = D.tratamentos.find(y => y.ID === tratID);
+    if (compensar && x) {
+      x.Compensadas = (Number(x.Compensadas) || 0) + 1;
+      const f = fimDe(x);
+      if (f) { const ini = new Date(x.Inicio).getTime(), hms = Number(x.IntervaloHoras) * H; x.Fim = new Date(ini + Math.floor((f - ini) / hms) * hms + hms).toISOString(); }
+    }
+  }).catch(() => {});
+  aviso(compensar ? '↻ Compensada: mais uma toma no fim' + (t.Eventos ? ' (avisos atualizados)' : '') : '✕ Ignorada: a data final mantém-se', 4000);
+}
+/** Corrige a hora a que a toma foi efetivamente dada (só o histórico) */
+function corrigirHora(tratID, ms) {
+  const t = (D.tratamentos || []).find(x => x.ID === tratID), f = t && tomaFeita(t, ms); if (!f) return;
+  const atual = new Date(f.TomadaEm);
+  const r = prompt('A que horas tomou? (HH:MM)\nPara outro dia: DD/MM HH:MM', hhmm(atual));
+  if (r === null) return;
+  const m = r.trim().match(/^(?:(\d{1,2})\/(\d{1,2})\s+)?(\d{1,2})[:h.](\d{2})$/);
+  if (!m) { aviso('Não percebi a hora. Ex.: 21:40'); return; }
+  const nova = new Date(atual);
+  if (m[1]) { nova.setMonth(+m[2] - 1); nova.setDate(+m[1]); }
+  nova.setHours(+m[3], +m[4], 0, 0);
+  if (nova.getTime() > Date.now() + 5 * 60000) { aviso('Essa hora ainda não chegou.'); return; }
+  gravar('corrigirToma', { TratID: tratID, Prevista: new Date(ms).toISOString(), TomadaEm: nova.toISOString() },
+    D => { const x = tomaFeita(D.tratamentos.find(y => y.ID === tratID), ms); if (x) x.TomadaEm = nova.toISOString(); }).catch(() => {});
+  aviso('✅ Hora corrigida: ' + hhmm(nova));
 }
 /** Aberto a partir do aviso do calendário: pergunta pela toma mais próxima da hora atual. */
 function confirmarTomei() {
@@ -1020,7 +1136,7 @@ function pesquisarSintoma() {
       ${g.m.Indicacoes ? `<div class="sub">🎯 ${esc(g.m.Indicacoes)}</div>` : ''}
       ${g.m.ComoTomar ? `<div class="sub" style="color:#202124">💊 ${esc(g.m.ComoTomar)}</div>` : ''}
       ${textoQtd(g.m) ? `<div class="sub">📦 Resta: ${textoQtd(g.m)}${g.m.Local ? ' · 📍 ' + esc(g.m.Local) : ''}</div>` : (g.m.Local ? `<div class="sub">📍 ${esc(g.m.Local)}</div>` : '')}
-      ${x ? '<div class="sub" style="color:var(--vermelho)"><b>Fora de prazo: não usar.</b></div>' : `<div class="acoes"><button class="btn sec peq" onclick="irUsar('${esc(g.m.ID)}')">📝 Usar</button></div>`}</div>`; };
+      ${x ? '<div class="sub" style="color:var(--vermelho)"><b>Fora de prazo: não usar.</b></div>' : eSocorros(g.m) ? '' : `<div class="acoes"><button class="btn sec peq" onclick="irUsar('${esc(g.m.ID)}')">📝 Usar</button></div>`}</div>`; };
   if (lista.length) {
     html += '<div class="sub" style="margin:10px 0 4px"><b>Em casa, para isto</b> (abertas primeiro, depois a que expira mais cedo):</div>';
     html += lista.map(cartao).join('');
@@ -1039,15 +1155,17 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Codigo', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
-const TICKS = ['Homeopatico', 'Receita'];
+const CAMPOS = ['ID', 'Codigo', 'Socorros', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const TICKS = ['Homeopatico', 'Receita', 'Socorros'];
 const lerCampo = c => TICKS.includes(c) ? ($('m-' + c).checked ? 'Sim' : '') : $('m-' + c).value.trim();
 const porCampo = (c, v) => { if (TICKS.includes(c)) $('m-' + c).checked = v === 'Sim' || v === true; else $('m-' + c).value = v == null ? '' : v; };
 function limparForm() {
   CAMPOS.forEach(c => porCampo(c, '')); $('m-codigo').value = ''; $('m-Pessoa').selectedIndex = 0; $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   if (pref.tipo === 'homeo') $('m-Homeopatico').checked = true;
   $('b-guardar').textContent = 'Guardar'; $('bloco-restante').style.display = 'none'; $('bloco-apagar').style.display = 'none'; $('f-codigo').style.display = 'none';
-  $('m-Nivel').value = 'Cheio'; contagemUI();
+  $('m-Nivel').value = 'Cheio'; $('m-Copias').value = '1';
+  if (pref.tipo === 'socorros') { $('m-Socorros').checked = true; $('m-Contagem').value = 'caixa'; $('m-Pessoa').value = 'Família'; }
+  formTipoUI();
 }
 function editar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
@@ -1056,7 +1174,7 @@ function editar(id) {
   if (!$('m-UnidadePrazo').value) $('m-UnidadePrazo').value = 'dias'; mostrarValidade();
   if (m.Codigo) { $('f-codigo-txt').textContent = m.Codigo; $('f-codigo').style.display = 'flex'; }
   if (!$('m-Nivel').value) $('m-Nivel').value = 'Cheio';
-  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; $('bloco-apagar').style.display = 'block'; contagemUI(); mostrar('adicionar');
+  $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; $('bloco-apagar').style.display = 'block'; formTipoUI(); mostrar('adicionar');
 }
 /* --- validade por mês/ano (como vem na caixa); guarda o último dia do mês --- */
 (function () {
@@ -1079,7 +1197,7 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
+const DADOS_PRODUTO = ['Socorros', 'Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
 // "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
 const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor', 'Indicacoes'];
 function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
@@ -1100,7 +1218,7 @@ function preencherVazios(mod, campos) {
     const el = $('m-' + c);
     if (el.value === '' || (c === 'UnidadePrazo' && !$('m-DiasAposAbertura').value)) { el.value = mod[c]; n++; }
   });
-  contagemUI();
+  formTipoUI();
   return n;
 }
 // escolher um nome da lista preenche o resto
@@ -1112,23 +1230,44 @@ function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
   ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local',
-   'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
-  contagemUI();
+   'Indicacoes', 'Homeopatico', 'Socorros', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
+  formTipoUI();
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
 
+/* ---- tipo do produto no formulário ---- */
+const tipoForm = () => $('m-Socorros').checked ? 'socorros' : $('m-Homeopatico').checked ? 'homeo' : 'med';
+function mudarTipoForm(t) {
+  $('m-Socorros').checked = t === 'socorros'; $('m-Homeopatico').checked = t === 'homeo';
+  const c = $('m-Contagem').value;
+  if (t === 'socorros' && c === '') $('m-Contagem').value = 'caixa';
+  if (t !== 'socorros' && c === 'caixa') $('m-Contagem').value = '';
+  if (t === 'socorros') $('m-Pessoa').value = 'Família';
+  formTipoUI();
+}
+function formTipoUI() {
+  const t = tipoForm();
+  $('form-med').classList.toggle('f-socorros', t === 'socorros');
+  document.querySelectorAll('#seg-tipo-form button').forEach(b => b.classList.toggle('ativo', b.dataset.t === t));
+  $('lbl-nome').textContent = t === 'socorros' ? 'Nome *' : 'Nome do medicamento *';
+  $('m-Nome').placeholder = t === 'socorros' ? 'ex.: Pensos rápidos, Álcool, Compressas' : 'ex.: Ben-u-ron';
+  $('bloco-copias').style.display = $('m-ID').value ? 'none' : '';
+  contagemUI();
+}
 function mudarContagem(c) {
   $('m-Contagem').value = c; contagemUI();
   if (c === 'nivel') { if (!$('m-Nivel').value) $('m-Nivel').value = 'Cheio'; if (!$('m-Unidade').value || /^(g|ml|gr)$/i.test($('m-Unidade').value)) $('m-Unidade').value = 'aplicação'; }
 }
 function contagemUI() {
-  const nivel = $('m-Contagem').value === 'nivel', editar = !!$('m-ID').value;
-  document.querySelectorAll('#seg-contagem button').forEach(b => b.classList.toggle('ativo', b.dataset.c === (nivel ? 'nivel' : '')));
+  const c = $('m-Contagem').value, nivel = c === 'nivel', caixa = c === 'caixa', editar = !!$('m-ID').value;
+  document.querySelectorAll('#seg-contagem button').forEach(b => b.classList.toggle('ativo', b.dataset.c === c));
+  $('duas-contagem').style.display = caixa ? 'none' : '';
+  if (caixa) { $('bloco-restante').style.display = 'none'; $('dica-contagem').textContent = 'Cada caixa conta como 1 unidade (ex.: uma caixa de pensos, mesmo com tamanhos diferentes).'; return; }
   $('cel-qtd').style.display = nivel ? 'none' : ''; $('cel-nivel').style.display = nivel ? '' : 'none';
   $('lbl-unidade').textContent = nivel ? 'Cada uso é…' : 'Unidade';
   $('m-Unidade').setAttribute('list', nivel ? 'dl-uso' : 'dl-unidades'); $('m-Unidade').placeholder = nivel ? 'aplicação' : 'comprimidos';
   $('bloco-restante').style.display = !nivel && editar ? 'block' : 'none';
-  $('dica-contagem').textContent = nivel ? 'Para cremes, pomadas, géis, colírios em frasco… Cada utilização conta como 1 aplicação (ou gotas) e não desconta; o que resta é o nível, que mudas com um toque no cartão.'
+  $('dica-contagem').textContent = nivel ? (tipoForm() === 'socorros' ? 'Para frascos (álcool, soro, desinfetante, protetor solar…): o que resta é o nível, que mudas com um toque no cartão.' : 'Para cremes, pomadas, géis, colírios em frasco… Cada utilização conta como 1 aplicação (ou gotas) e não desconta; o que resta é o nível, que mudas com um toque no cartão.')
                                          : 'Comprimidos, saquetas, monodoses, ml, sprays com nº de pulverizações… Cada utilização desconta. Xaropes: a quantidade em ml é aproximada.';
 }
 function cancelarEdicao() { limparForm(); mostrar('inventario'); }
@@ -1215,19 +1354,22 @@ function alterarLocal(id, mud) {
 }
 function guardarMed() {
   const d = {}; CAMPOS.forEach(c => d[c] = lerCampo(c));
-  if (!d.Nome) { aviso('Falta o nome do medicamento'); return; }
+  if (!d.Nome) { aviso('Falta o nome'); return; }
   delete d.Codigo;
   const novo = !d.ID;
+  d.Copias = novo ? Math.min(20, Math.max(1, parseInt($('m-Copias').value, 10) || 1)) : 1;
   if (novo) { delete d.ID; delete d.Restante; }
   const local = novo
     ? (D => { const m = Object.assign({ ID: 'tmp' + Date.now(), Estado: 'Disponível', CriadoEm: hojeISO(), Codigo: '' }, d);
               if (porNivel(m)) { m.Quantidade = ''; m.Restante = ''; m.Nivel = m.Nivel || 'Cheio'; } else { m.Nivel = ''; if (temNum(m.Quantidade)) m.Restante = m.Quantidade; }
-              m.ValidadeReal = calcValidadeReal(m); D.inventario.push(m); })
+              if (porCaixa(m)) { m.Quantidade = ''; m.Restante = ''; }
+              m.ValidadeReal = calcValidadeReal(m);
+              for (let k = 0; k < d.Copias; k++) D.inventario.push(Object.assign({}, m, { ID: m.ID + '_' + k })); })
     : alterarLocal(d.ID, d);
   aviso('✅ Guardado'); limparForm(); mostrar('inventario');
   gravar('guardarMed', d, local).then(r => {
     const m = r && D.inventario.find(x => x.ID === r.ID);
-    if (novo && m && m.Codigo) aviso('✅ Guardado · código ' + m.Codigo, 3500);
+    if (novo && m && m.Codigo) aviso(d.Copias > 1 ? `✅ ${d.Copias} caixas guardadas` : '✅ Guardado · código ' + m.Codigo, 3500);
   }).catch(() => {   // devolve o que estava escrito ao formulário
     limparForm(); CAMPOS.forEach(c => { if (d[c] != null) porCampo(c, d[c]); }); mostrarValidade();
     if (!novo) { $('b-guardar').textContent = 'Guardar alterações'; $('bloco-restante').style.display = 'block'; }
@@ -1459,7 +1601,7 @@ function mostrarPainel(txt, r, idEscolhido) {
       ${m.ReceitadoPor ? `<div class="sub">🩺 ${esc(m.ReceitadoPor)}</div>` : ''}
       ${m.Lote ? `<div class="sub">Lote ${esc(m.Lote)}</div>` : ''}
       <div class="acoes">${m.Estado === 'Disponível' ? `
-        <button class="btn sec peq" onclick="painelAcao('usar','${esc(m.ID)}')">📝 Usar</button>
+        ${eSocorros(m) ? '' : `<button class="btn sec peq" onclick="painelAcao('usar','${esc(m.ID)}')">📝 Usar</button>`}
         ${!m.DataAbertura ? `<button class="btn sec peq" onclick="painelAcao('abrir','${esc(m.ID)}')">📂 Abri hoje</button>` : ''}
         <button class="btn sec peq" onclick="painelAcao('editar','${esc(m.ID)}')">✏️ Editar</button>
         <button class="btn perigo peq" onclick="painelAcao('fora','${esc(m.ID)}')">🗑️ Retirar</button>`
