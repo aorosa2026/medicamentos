@@ -1401,7 +1401,20 @@ function guardarMed() {
               m.ValidadeReal = calcValidadeReal(m);
               for (let k = 0; k < d.Copias; k++) D.inventario.push(Object.assign({}, m, { ID: m.ID + '_' + k })); })
     : alterarLocal(d.ID, d);
+  // mudou o tipo (medicamento / homeopático / socorros)? pergunta pelas outras caixas do mesmo produto
+  const antes = novo ? null : D.inventario.find(x => x.ID === d.ID);
+  const tipoNovo = d.Socorros === 'Sim' ? 'socorros' : d.Homeopatico === 'Sim' ? 'homeo' : 'med';
+  const outras = antes && tipoDe(antes) !== tipoNovo ? D.inventario.filter(x => x.ID !== d.ID && norm(x.Nome) === norm(d.Nome) && tipoDe(x) !== tipoNovo) : [];
   aviso('✅ Guardado'); limparForm(); mostrar('inventario');
+  if (outras.length && confirm(`Mudar também as outras ${outras.length} caixa(s) de "${d.Nome}" para ${NOME_TIPO[tipoNovo]}?`)) {
+    gravar('tipoProduto', { Nome: d.Nome, Homeopatico: d.Homeopatico, Socorros: d.Socorros }, D => {
+      D.inventario.concat(D.catalogo).filter(x => norm(x.Nome) === norm(d.Nome)).forEach(x => {
+        x.Homeopatico = d.Homeopatico; x.Socorros = d.Socorros;
+        if (d.Socorros === 'Sim' && !x.Contagem) x.Contagem = 'caixa'; else if (d.Socorros !== 'Sim' && x.Contagem === 'caixa') x.Contagem = '';
+      });
+    }).catch(() => {});
+  }
+  if (antes && tipoDe(antes) !== tipoNovo) { pref.tipo = tipoNovo; guardarPref(); }
   gravar('guardarMed', d, local).then(r => {
     const m = r && D.inventario.find(x => x.ID === r.ID);
     if (novo && m && m.Codigo) aviso(d.Copias > 1 ? `✅ ${d.Copias} caixas guardadas` : '✅ Guardado · código ' + m.Codigo, 3500);
