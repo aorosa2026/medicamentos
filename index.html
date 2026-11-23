@@ -209,8 +209,7 @@
       <input type="checkbox" id="m-Homeopatico" hidden><input type="checkbox" id="m-Socorros" hidden>
       <label class="tick so-med"><input type="checkbox" id="m-Receita"> ℞ Obrigatório ter receita</label>
       <label>🎯 Para que serve</label><input id="m-Indicacoes" placeholder="ex.: febre, dores, dor de garganta">
-      <div class="so-med"><label>Para quem?</label>
-        <select id="m-ParaQuem"><option value="">— não sei —</option><option value="Adulto">👤 Adulto</option><option value="Criança">🧒 Criança</option><option value="Ambos">👥 Ambos</option></select></div>
+
       <div class="so-med">
       <label>💊 Como tomar</label><textarea id="m-ComoTomar" placeholder="ex.: 5 ml de 8 em 8 horas, se febre" style="min-height:48px"></textarea>
       <label>🩺 Receitado por</label><input id="m-ReceitadoPor" list="dl-receitado" placeholder="ex.: Dra. Silva (pediatra)">
@@ -280,7 +279,7 @@
       <input id="s-texto" class="limpavel" placeholder="ex.: febre, tosse, dor de ouvido…">
       <div class="dica">Vírgula = "ou" (<i>febre, tosse</i>) · palavras juntas = "e" (<i>dor garganta</i>).</div>
       <div class="seg" id="seg-idade" style="margin:8px 0 0">
-        <button type="button" class="ativo" data-i="" onclick="filtrarIdade('')">Todos</button>
+        <button type="button" class="ativo" data-i="" onclick="filtrarIdade('')">👨‍👩‍👦‍👦 Família</button>
         <button type="button" data-i="Adulto" onclick="filtrarIdade('Adulto')">👤 Adulto</button>
         <button type="button" data-i="Criança" onclick="filtrarIdade('Criança')">🧒 Criança</button>
       </div>
@@ -350,10 +349,12 @@
     <div class="cartao">
       <h3>Pessoas</h3>
       <div id="lista-pessoas" class="sub"></div>
+      <div class="dica">Marca quem é adulto e quem é criança. "Família" = os dois. A pesquisa por sintoma usa isto para filtrar.</div>
       <div class="duas">
         <div><label>Nome</label><input id="p-Nome"></div>
         <div><label>Notas (ex.: alergias)</label><input id="p-Notas"></div>
       </div>
+      <div class="linha" style="gap:16px"><label class="tick"><input type="checkbox" id="p-Adulto"> 👤 Adulto</label><label class="tick"><input type="checkbox" id="p-Crianca"> 🧒 Criança</label></div>
       <div class="acoes"><button class="btn sec" onclick="guardarPessoa()">Adicionar / atualizar</button></div>
     </div>
   </section>
@@ -652,7 +653,11 @@ function desenharTudo() {
   $('dl-motivos').innerHTML = unicos(D.utilizacoes.map(u => u.Motivo)).map(n => `<option>${esc(n)}</option>`).join('');
   desenharRenomear();
   $('lista-pessoas').innerHTML = D.pessoas.length
-    ? D.pessoas.map(p => `• <b>${esc(p.Nome)}</b>${p.Notas ? ' — ' + esc(p.Notas) : ''}`).join('<br>')
+    ? D.pessoas.map(p => `<div class="linha" style="border-top:1px solid #eee;padding:6px 0;flex-wrap:nowrap">
+        <span style="flex:1;color:#202124">${iconePessoa(p.Nome)} <b>${esc(p.Nome)}</b>${p.Notas ? ' <span class="sub">— ' + esc(p.Notas) + '</span>' : ''}</span>
+        <label class="tick" style="margin:0;font-size:13px"><input type="checkbox" ${p.Adulto === 'Sim' ? 'checked' : ''} data-n="${esc(p.Nome)}" onchange="marcarPessoa(this.dataset.n, 'Adulto', this.checked)"> Adulto</label>
+        <label class="tick" style="margin:0 0 0 8px;font-size:13px"><input type="checkbox" ${p.Crianca === 'Sim' ? 'checked' : ''} data-n="${esc(p.Nome)}" onchange="marcarPessoa(this.dataset.n, 'Crianca', this.checked)"> Criança</label>
+      </div>`).join('')
     : 'Ainda não há pessoas. Adiciona em baixo.';
   desenharInventario(); desenharUsos(); pesquisarSintoma(); desenharStock(); desenharTratamentos();
 }
@@ -1129,8 +1134,14 @@ function criarProcura(texto) {
 }
 let filtroIdade = '';
 function filtrarIdade(i) { filtroIdade = i; document.querySelectorAll('#seg-idade button').forEach(b => b.classList.toggle('ativo', b.dataset.i === i)); pesquisarSintoma(); }
-const serveIdade = m => !filtroIdade || m.ParaQuem === filtroIdade || m.ParaQuem === 'Ambos';
-const seloIdade = m => ({ Adulto: '👤 adulto', 'Criança': '🧒 criança', Ambos: '👥 adulto e criança' }[m.ParaQuem] || '❔ para quem?');
+// adulto / criança vem da pessoa da caixa (Definições → Pessoas)
+const pessoaDe = nome => D.pessoas.find(p => norm(p.Nome) === norm(nome));
+function iconePessoa(nome) {
+  const p = pessoaDe(nome), a = p && p.Adulto === 'Sim', c = p && p.Crianca === 'Sim';
+  return a && c ? '👨‍👩‍👦‍👦' : c ? '🧒' : a ? '👤' : '❔';
+}
+const serveIdade = m => { if (!filtroIdade) return true; const p = pessoaDe(m.Pessoa); return !!p && (filtroIdade === 'Adulto' ? p.Adulto === 'Sim' : p.Crianca === 'Sim'); };
+const seloIdade = m => `${iconePessoa(m.Pessoa)} ${esc(m.Pessoa || 'sem pessoa')}`;
 function pesquisarSintoma() {
   const t = norm($('s-texto').value);
   if (!t) { $('s-resultado').innerHTML = ''; return; }
@@ -1167,7 +1178,7 @@ function pesquisarSintoma() {
   }
   if (!todos.length) html += usos.length
     ? '<div class="sub" style="margin:10px 0">Já foi tratado antes, mas esses medicamentos já não estão disponíveis.</div>'
-    : `<div class="sub" style="margin:10px 0">Sem registos para este sintoma${filtroIdade ? ' (' + (filtroIdade === 'Adulto' ? 'adulto' : 'criança') + '). Os medicamentos sem "Para quem?" preenchido só aparecem em Todos' : ''}.</div>`;
+    : `<div class="sub" style="margin:10px 0">Sem registos para este sintoma${filtroIdade ? ' (' + (filtroIdade === 'Adulto' ? 'adulto' : 'criança') + '). Confirma em ⚙️ Definições → Pessoas quem está marcado como ' + (filtroIdade === 'Adulto' ? 'adulto' : 'criança') : ''}.</div>`;
   if (usos.length) html += `<details style="margin-top:6px"><summary class="sub">Ver histórico (${usos.length})</summary>${linhasUsos(usos.slice().reverse())}</details>`;
   $('s-resultado').innerHTML = html;
 }
@@ -1176,7 +1187,7 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Codigo', 'Socorros', 'ParaQuem', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const CAMPOS = ['ID', 'Codigo', 'Socorros', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
 const TICKS = ['Homeopatico', 'Receita', 'Socorros'];
 const lerCampo = c => TICKS.includes(c) ? ($('m-' + c).checked ? 'Sim' : '') : $('m-' + c).value.trim();
 const porCampo = (c, v) => { if (TICKS.includes(c)) $('m-' + c).checked = v === 'Sim' || v === true; else $('m-' + c).value = v == null ? '' : v; };
@@ -1218,7 +1229,7 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['ParaQuem', 'Socorros', 'Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
+const DADOS_PRODUTO = ['Socorros', 'Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
 // "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
 const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor', 'Indicacoes'];
 function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
@@ -1251,7 +1262,7 @@ function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
   ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local',
-   'Indicacoes', 'Homeopatico', 'Socorros', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem', 'ParaQuem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
+   'Indicacoes', 'Homeopatico', 'Socorros', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
   formTipoUI();
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
@@ -1509,11 +1520,14 @@ function esquecerConfig() {
   try { localStorage.removeItem(LS); localStorage.removeItem(LS_DADOS); } catch (e) {}
   cfg = {}; D = VAZIO(); desenharTudo(); sync(''); mostrar('def'); aviso('Ligação apagada deste telemóvel');
 }
+function marcarPessoa(nome, campo, on) {
+  gravar('guardarPessoa', { Nome: nome, [campo]: on ? 'Sim' : '' }, D => { const p = D.pessoas.find(x => x.Nome === nome); if (p) p[campo] = on ? 'Sim' : ''; }).catch(() => {});
+}
 async function guardarPessoa() {
-  const d = { Nome: $('p-Nome').value.trim(), Notas: $('p-Notas').value.trim() };
+  const d = { Nome: $('p-Nome').value.trim(), Notas: $('p-Notas').value.trim(), Adulto: $('p-Adulto').checked ? 'Sim' : '', Crianca: $('p-Crianca').checked ? 'Sim' : '' };
   if (!d.Nome) { aviso('Falta o nome'); return; }
-  gravar('guardarPessoa', d, D => { const p = D.pessoas.find(x => norm(x.Nome) === norm(d.Nome)); if (p) p.Notas = d.Notas; else D.pessoas.push(d); }).catch(() => {});
-  $('p-Nome').value = ''; $('p-Notas').value = ''; aviso('✅ Guardado');
+  gravar('guardarPessoa', d, D => { const p = D.pessoas.find(x => norm(x.Nome) === norm(d.Nome)); if (p) Object.assign(p, d, { Nome: p.Nome }); else D.pessoas.push(d); }).catch(() => {});
+  $('p-Nome').value = ''; $('p-Notas').value = ''; $('p-Adulto').checked = false; $('p-Crianca').checked = false; aviso('✅ Guardado');
 }
 
 /* ============ LEITOR DE CÓDIGOS (carregado só quando é preciso) ============ */
