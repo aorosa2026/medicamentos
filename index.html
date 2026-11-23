@@ -106,7 +106,7 @@
     </div>
     <div class="linha" style="margin-bottom:10px;flex-wrap:nowrap">
       <input id="f-texto" class="limpavel" placeholder="🔎 Nome, substância, código (M0012)…">
-      <button class="btn sec" onclick="abrirLeitor('verificar')" title="Verificar caixa">📷</button>
+      <button class="btn sec" onclick="abrirLeitor('verificar', pref.tipo)" title="Ler caixa deste separador">📷</button>
     </div>
     <div id="estado-sync" class="dica" style="margin:-4px 2px 8px"></div>
     <div id="lista"></div>
@@ -209,6 +209,8 @@
       <input type="checkbox" id="m-Homeopatico" hidden><input type="checkbox" id="m-Socorros" hidden>
       <label class="tick so-med"><input type="checkbox" id="m-Receita"> ℞ Obrigatório ter receita</label>
       <label>🎯 Para que serve</label><input id="m-Indicacoes" placeholder="ex.: febre, dores, dor de garganta">
+      <div class="so-med"><label>Para quem?</label>
+        <select id="m-ParaQuem"><option value="">— não sei —</option><option value="Adulto">👤 Adulto</option><option value="Criança">🧒 Criança</option><option value="Ambos">👥 Ambos</option></select></div>
       <div class="so-med">
       <label>💊 Como tomar</label><textarea id="m-ComoTomar" placeholder="ex.: 5 ml de 8 em 8 horas, se febre" style="min-height:48px"></textarea>
       <label>🩺 Receitado por</label><input id="m-ReceitadoPor" list="dl-receitado" placeholder="ex.: Dra. Silva (pediatra)">
@@ -276,6 +278,12 @@
     <div class="cartao">
       <h3>🔎 Para que sintoma?</h3>
       <input id="s-texto" class="limpavel" placeholder="ex.: febre, tosse, dor de ouvido…">
+      <div class="dica">Vírgula = "ou" (<i>febre, tosse</i>) · palavras juntas = "e" (<i>dor garganta</i>).</div>
+      <div class="seg" id="seg-idade" style="margin:8px 0 0">
+        <button type="button" class="ativo" data-i="" onclick="filtrarIdade('')">Todos</button>
+        <button type="button" data-i="Adulto" onclick="filtrarIdade('Adulto')">👤 Adulto</button>
+        <button type="button" data-i="Criança" onclick="filtrarIdade('Criança')">🧒 Criança</button>
+      </div>
       <div id="s-resultado"></div>
       <div class="dica">É só o histórico da família. Não substitui o médico ou o farmacêutico. A dose (sobretudo nas crianças) depende da idade e do peso: confirma sempre no folheto.</div>
     </div>
@@ -311,7 +319,8 @@
   <!-- DEFINIÇÕES -->
   <section id="e-def" class="ecra">
     <div class="cartao">
-      <h3>Ligação ao teu Google Sheet</h3>
+      <details class="abre" id="det-ligacao">
+      <summary style="border-top:0"><span>🔗 Ligação ao teu Google Sheet</span></summary>
       <div class="sub">Fica guardada só neste telemóvel. Vê no Sheet: menu 💊 Medicamentos → Mostrar chave / ligação.</div>
       <label>URL do script (termina em /exec)</label><input id="c-url" placeholder="https://script.google.com/macros/s/…/exec">
       <label>Chave secreta</label><input id="c-key" type="text" class="segredo" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other">
@@ -319,6 +328,7 @@
         <button class="btn" onclick="guardarConfig()">Guardar e testar</button>
         <button class="btn perigo" onclick="esquecerConfig()">Esquecer neste telemóvel</button>
       </div>
+      </details>
     </div>
     <div class="cartao">
       <h3>Separadores</h3>
@@ -544,7 +554,7 @@ function mostrar(e) {
   document.querySelectorAll('.ecra').forEach(s => s.classList.toggle('ativo', s.id === 'e-' + e));
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('ativo', b.dataset.e === e));
   window.scrollTo(0, 0);
-  if (e === 'def') { $('c-url').value = cfg.url || ''; $('c-key').value = cfg.key || ''; }
+  if (e === 'def') { $('c-url').value = cfg.url || ''; $('c-key').value = cfg.key || ''; $('det-ligacao').open = !cfg.url; }
   if (e === 'usos' && !$('u-Data').value) { $('u-Data').value = hojeISO(); infoUso(); }
   // formulário vazio: começa no tipo do separador escolhido no Inventário
   if (e === 'adicionar' && !$('m-ID').value && !$('m-Nome').value && tipoForm() !== pref.tipo) limparForm();
@@ -1112,25 +1122,36 @@ function confirmarTomei() {
 }
 
 /* ============ PESQUISA POR SINTOMA ============ */
+/* pesquisa: vírgula = "ou"; palavras juntas = "e" (em qualquer ordem) */
+function criarProcura(texto) {
+  const termos = String(texto || '').split(/[,;]/).map(norm).filter(Boolean).map(x => x.split(/\s+/));
+  return txt => { const s = norm(txt); return termos.some(pal => pal.every(p => s.includes(p))); };
+}
+let filtroIdade = '';
+function filtrarIdade(i) { filtroIdade = i; document.querySelectorAll('#seg-idade button').forEach(b => b.classList.toggle('ativo', b.dataset.i === i)); pesquisarSintoma(); }
+const serveIdade = m => !filtroIdade || m.ParaQuem === filtroIdade || m.ParaQuem === 'Ambos';
+const seloIdade = m => ({ Adulto: '👤 adulto', 'Criança': '🧒 criança', Ambos: '👥 adulto e criança' }[m.ParaQuem] || '❔ para quem?');
 function pesquisarSintoma() {
   const t = norm($('s-texto').value);
   if (!t) { $('s-resultado').innerHTML = ''; return; }
-  const usos = D.utilizacoes.filter(u => norm(u.Motivo).includes(t) || norm(u.Notas).includes(t));
+  const encaixa = criarProcura($('s-texto').value);
+  const usos = D.utilizacoes.filter(u => encaixa(u.Motivo) || encaixa(u.Notas));
   const med = Object.fromEntries(D.inventario.map(m => [m.ID, m]));
   // agrupar por medicamento disponível
   const grupos = {};
   usos.forEach(u => {
-    const m = med[u.MedID]; if (!m || m.Estado !== 'Disponível') return;
+    const m = med[u.MedID]; if (!m || m.Estado !== 'Disponível' || !serveIdade(m)) return;
     const g = grupos[m.ID] = grupos[m.ID] || { m, n: 0, ultima: '', pessoas: new Set() };
     g.n++; g.pessoas.add(u.Pessoa); if (String(u.Data) > g.ultima) g.ultima = String(u.Data);
   });
   // também os indicados para isto ("para que serve"), mesmo que nunca usados
-  D.inventario.forEach(m => { if (m.Estado === 'Disponível' && norm(m.Indicacoes).includes(t) && !grupos[m.ID]) grupos[m.ID] = { m, n: 0, ultima: '', pessoas: new Set(), indicado: true }; });
+  D.inventario.forEach(m => { if (m.Estado === 'Disponível' && serveIdade(m) && encaixa(m.Indicacoes) && !grupos[m.ID]) grupos[m.ID] = { m, n: 0, ultima: '', pessoas: new Set(), indicado: true }; });
   const todos = Object.values(grupos).sort((a, b) => ordemUsar(a.m, b.m));
   const lista = todos.filter(g => !expirada(g.m)), velhos = todos.filter(g => expirada(g.m));
   let html = '';
   const cartao = g => { const ev = estadoValidade(g.m), x = expirada(g.m); return `<div class="cartao" style="background:${x ? '#fce8e6' : '#f8fafd'}">
       <div class="linha" style="justify-content:space-between"><b>${esc(g.m.Nome)} ${esc(g.m.Dosagem || '')}</b><span class="badge ${ev.cls}">${ev.txt}</span></div>
+      ${eSocorros(g.m) ? '' : `<div class="sub" style="color:#202124">${seloIdade(g.m)}</div>`}
       <div class="sub">${g.m.Codigo ? '<span class="codigo">' + esc(g.m.Codigo) + '</span> ' : ''}${aberta(g.m) ? '📂 aberta a ' + fmt(g.m.DataAbertura) + ' · ' : ''}válida até ${fmt(g.m.ValidadeReal) || '—'}</div>
       <div class="sub">${esc(g.m.Substancia || '')}${g.n ? ` · usado ${g.n}× · última vez ${fmt(g.ultima)} · ${esc([...g.pessoas].join(', '))}` : ' · ainda não usado'}</div>
       ${g.m.Indicacoes ? `<div class="sub">🎯 ${esc(g.m.Indicacoes)}</div>` : ''}
@@ -1146,7 +1167,7 @@ function pesquisarSintoma() {
   }
   if (!todos.length) html += usos.length
     ? '<div class="sub" style="margin:10px 0">Já foi tratado antes, mas esses medicamentos já não estão disponíveis.</div>'
-    : '<div class="sub" style="margin:10px 0">Sem registos para este sintoma.</div>';
+    : `<div class="sub" style="margin:10px 0">Sem registos para este sintoma${filtroIdade ? ' (' + (filtroIdade === 'Adulto' ? 'adulto' : 'criança') + '). Os medicamentos sem "Para quem?" preenchido só aparecem em Todos' : ''}.</div>`;
   if (usos.length) html += `<details style="margin-top:6px"><summary class="sub">Ver histórico (${usos.length})</summary>${linhasUsos(usos.slice().reverse())}</details>`;
   $('s-resultado').innerHTML = html;
 }
@@ -1155,7 +1176,7 @@ $('s-texto').oninput = pesquisarSintoma;
 $('f-texto').oninput = desenharInventario;
 
 /* ============ FORMULÁRIO ============ */
-const CAMPOS = ['ID', 'Codigo', 'Socorros', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
+const CAMPOS = ['ID', 'Codigo', 'Socorros', 'ParaQuem', 'Contagem', 'Nivel', 'Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'Serie', 'Lote', 'Validade', 'DataAbertura', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Restante', 'Local', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Notas'];
 const TICKS = ['Homeopatico', 'Receita', 'Socorros'];
 const lerCampo = c => TICKS.includes(c) ? ($('m-' + c).checked ? 'Sim' : '') : $('m-' + c).value.trim();
 const porCampo = (c, v) => { if (TICKS.includes(c)) $('m-' + c).checked = v === 'Sim' || v === true; else $('m-' + c).value = v == null ? '' : v; };
@@ -1197,7 +1218,7 @@ function mostrarValidade() {
 }
 
 /* --- modelo de um medicamento já conhecido (catálogo ou caixa anterior) --- */
-const DADOS_PRODUTO = ['Socorros', 'Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
+const DADOS_PRODUTO = ['ParaQuem', 'Socorros', 'Contagem', 'Substancia', 'Dosagem', 'Forma', 'Quantidade', 'Unidade', 'UnidadePrazo', 'DiasAposAbertura', 'NRegisto', 'GTIN', 'Indicacoes', 'Homeopatico', 'Receita', 'ComoTomar', 'ReceitadoPor'];
 // "como tomar" e "receitado por" vêm da caixa mais recente desse medicamento (a última versão que escreveste)
 const DO_ULTIMO = ['ComoTomar', 'ReceitadoPor', 'Indicacoes'];
 function ultimoValor(caixas, c) { const l = caixas.slice().sort((a, b) => String(b.AtualizadoEm || b.CriadoEm || '').localeCompare(String(a.AtualizadoEm || a.CriadoEm || ''))); const m = l.find(x => x[c] !== '' && x[c] != null); return m ? m[c] : ''; }
@@ -1230,7 +1251,7 @@ function duplicar(id) {
   const m = D.inventario.find(x => x.ID === id); if (!m) return;
   limparForm();
   ['Pessoa', 'Nome', 'Substancia', 'Dosagem', 'Forma', 'NRegisto', 'GTIN', 'DiasAposAbertura', 'UnidadePrazo', 'Quantidade', 'Unidade', 'Local',
-   'Indicacoes', 'Homeopatico', 'Socorros', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
+   'Indicacoes', 'Homeopatico', 'Socorros', 'Receita', 'ComoTomar', 'ReceitadoPor', 'Contagem', 'ParaQuem'].forEach(c => { if (m[c] != null && m[c] !== '') porCampo(c, m[c]); });
   formTipoUI();
   mostrar('adicionar'); aviso('Nova caixa de ' + m.Nome + ': indica a validade e guarda.', 4000);
 }
@@ -1295,11 +1316,14 @@ const mesmoCodigo = (m, r) => (r.nregisto && cod(m.NRegisto) === cod(r.nregisto)
 const nomesDoCodigo = r => new Set(D.catalogo.filter(c => mesmoCodigo(c, r)).map(c => norm(c.Nome)));
 const mesmoProduto = (m, r, nomes) => mesmoCodigo(m, r) || (nomes || nomesDoCodigo(r)).has(norm(m.Nome));
 /** Devolve { exata } | { semSerie:[...], outras:[...] } — "semSerie" = caixas antigas deste medicamento ainda sem código único */
-function encontrarCaixa(r) {
-  const exata = D.inventario.find(m => mesmaCaixa(m, r));
+let filtroLeitor = null;   // tipo do separador quando o leitor foi aberto no Inventário; null = tudo
+const NOME_TIPO = { med: '💊 Medicamentos', homeo: '🌿 Homeopáticos', socorros: '✚ Primeiros socorros' };
+function encontrarCaixa(r, todos) {
+  const inv = !todos && filtroLeitor && modoLeitor === 'verificar' ? D.inventario.filter(m => tipoDe(m) === filtroLeitor) : D.inventario;
+  const exata = inv.find(m => mesmaCaixa(m, r));
   if (exata) return { exata, semSerie: [], outras: [] };
   const nomes = nomesDoCodigo(r);
-  const iguais = D.inventario.filter(m => m.Estado === 'Disponível' && mesmoProduto(m, r, nomes));
+  const iguais = inv.filter(m => m.Estado === 'Disponível' && mesmoProduto(m, r, nomes));
   return { semSerie: iguais.filter(m => !m.Serie), outras: iguais.filter(m => m.Serie) };
 }
 function catalogoDe(r) { return D.catalogo.find(c => mesmoCodigo(c, r)); }
@@ -1529,10 +1553,11 @@ function bip(erro) {
   } catch (e) {}
 }
 
-async function abrirLeitor(modo) {
+async function abrirLeitor(modo, tipo) {
   prepararSom();
   modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 }; $('leitor-fechar').textContent = '✕ Desligar';
-  $('leitor-titulo').textContent = TITULOS[modo] || '📷 Ler caixa';
+  filtroLeitor = modo === 'verificar' && tipo ? tipo : null;
+  $('leitor-titulo').textContent = (TITULOS[modo] || '📷 Ler caixa') + (filtroLeitor ? ' · ' + NOME_TIPO[filtroLeitor] : '');
   $('leitor-dica').textContent = modo === 'verificar' ? 'Lê as caixas uma a uma (quadradinho ou código de barras). A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) ou para o código de barras';
   $('leitor-res').innerHTML = ''; $('leitor').style.display = 'block';
   $('leitorModal').style.display = 'flex';
@@ -1553,6 +1578,11 @@ async function abrirLeitor(modo) {
 async function pararCamara() {
   try { if (leitor && leitor.isScanning) await leitor.stop(); if (leitor) leitor.clear(); } catch (e) {}
   leitor = null; $('leitor').style.display = 'none';
+}
+function mudarLeitorPara(tipo) {
+  filtroLeitor = tipo; pref.tipo = tipo; guardarPref(); desenharInventario();
+  $('leitor-titulo').textContent = TITULOS.verificar + ' · ' + NOME_TIPO[tipo];
+  if (painelAtual) mostrarPainel(painelAtual.txt, painelAtual.r);
 }
 async function fecharLeitor() { await pararCamara(); painelAtual = null; $('leitorModal').style.display = 'none'; }
 
@@ -1583,6 +1613,16 @@ function abrirPainel(txt, r, modo) {
 function mostrarPainel(txt, r, idEscolhido) {
   painelAtual = { txt, r, id: idEscolhido };
   const e = encontrarCaixa(r);
+  // leitor aberto num separador e o produto é de outro: diz onde está
+  if (filtroLeitor && !idEscolhido && !e.exata && !e.semSerie.length && !e.outras.length) {
+    const t = encontrarCaixa(r, true), m = t.exata || t.semSerie[0] || t.outras[0];
+    if (m) {
+      $('leitor-res').innerHTML = `<div class="banner neutro">${esc(m.Nome)}<small>Este produto está em ${NOME_TIPO[tipoDe(m)]}</small></div>
+        <div class="acoes" style="justify-content:center"><button class="btn" onclick="mudarLeitorPara('${tipoDe(m)}')">Abrir em ${NOME_TIPO[tipoDe(m)]}</button></div>
+        <div class="dica" style="color:#ddd;text-align:center">${modoLeitor === 'verificar' ? 'Ou lê a caixa seguinte.' : ''}</div>`;
+      return;
+    }
+  }
   if (idEscolhido) e.exata = D.inventario.find(m => m.ID === idEscolhido);
   const cat = catalogoDe(r) || e.semSerie[0] || e.outras[0];
   const nome = e.exata ? e.exata.Nome : (cat ? cat.Nome : 'Medicamento desconhecido');
@@ -1618,7 +1658,7 @@ function mostrarPainel(txt, r, idEscolhido) {
       html += '<div class="cartao">' + todas.map(m => { const ev = estadoValidade(m); return `
         <div style="border-top:1px solid #eee;padding:8px 0" class="linha">
           <span class="badge ${ev.cls}">${ev.txt}</span>
-          <span class="sub" style="flex:1">📅 ${fmt(m.ValidadeReal) || '—'} · 👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}${m.DataAbertura ? ' · aberta' : ''}${textoQtd(m) ? ' · resta ' + textoQtd(m) : ''}</span>
+          <span class="sub" style="flex:1">${m.Codigo ? '<span class="codigo">' + esc(m.Codigo) + '</span> ' : ''}📅 ${fmt(m.ValidadeReal) || '—'} · 👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}${m.DataAbertura ? ' · aberta' : ''}${textoQtd(m) ? ' · resta ' + textoQtd(m) : ''}</span>
           <button class="btn sec peq" onclick="mostrarPainel(painelAtual.txt, painelAtual.r, '${esc(m.ID)}')">Esta</button>
         </div>`; }).join('') + `<div class="acoes"><button class="btn peq" onclick="painelAcao('nova')">➕ É uma caixa nova</button></div></div>`;
     } else if (e.semSerie.length) {
@@ -1626,7 +1666,7 @@ function mostrarPainel(txt, r, idEscolhido) {
         <div class="dica">Ao escolheres, o código fica associado e esta caixa passa a ser reconhecida.</div>`;
       html += e.semSerie.sort((a, b) => (b.Validade === r.validade) - (a.Validade === r.validade)).map(m => `
         <div style="border-top:1px solid #eee;padding:8px 0">
-          <div class="sub">${m.Validade === r.validade ? '<b style="color:var(--verde)">✔ validade igual</b> · ' : ''}📅 ${fmt(m.Validade) || '—'} · 👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}${m.DataAbertura ? ' · aberta' : ''}${textoQtd(m) ? ' · resta ' + textoQtd(m) : ''}</div>
+          <div class="sub">${m.Codigo ? '<span class="codigo">' + esc(m.Codigo) + '</span> ' : ''}${m.Validade === r.validade ? '<b style="color:var(--verde)">✔ validade igual</b> · ' : ''}📅 ${fmt(m.Validade) || '—'} · 👤 ${esc(m.Pessoa || '—')}${m.Local ? ' · 📍 ' + esc(m.Local) : ''}${m.DataAbertura ? ' · aberta' : ''}${textoQtd(m) ? ' · resta ' + textoQtd(m) : ''}</div>
           <button class="btn sec peq" style="margin-top:4px" onclick="associar('${esc(m.ID)}')">É esta</button>
         </div>`).join('');
       html += `<div class="acoes"><button class="btn peq" onclick="painelAcao('nova')">Não, é uma caixa nova</button></div></div>`;
