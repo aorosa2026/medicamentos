@@ -39,7 +39,13 @@
   .acoes { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
   .filtros { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
   #leitorModal { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; z-index:20; flex-direction:column; align-items:center; justify-content:center; padding:16px; }
-  #leitor { width:100%; max-width:420px; background:#000; }
+  #leitor { width:100%; max-width:420px; background:#000; border-radius:10px; overflow:hidden; }
+  .cam { position:relative; width:100%; }
+  .cam video { width:100%; display:block; max-height:60vh; object-fit:cover; }
+  .mira { position:absolute; left:15%; top:15%; width:70%; height:70%; border:3px solid rgba(255,255,255,.9); border-radius:14px; box-shadow:0 0 0 9999px rgba(0,0,0,.28); pointer-events:none; }
+  .mira.lido { border-color:#34a853; }
+  #leitor-botoes { display:flex; gap:8px; justify-content:center; margin-top:8px; }
+  #leitor-botoes button { background:#ffffff22; color:#fff; border:1px solid #ffffff55; }
   #aviso { position:fixed; left:12px; right:12px; bottom:84px; background:#323232; color:#fff; padding:12px 14px; border-radius:8px; display:none; z-index:30; }
   .resumo { display:flex; gap:8px; margin-bottom:10px; }
   .resumo div { flex:1; background:#fff; border-radius:10px; padding:8px; text-align:center; font-size:12px; color:var(--cinza); }
@@ -374,6 +380,11 @@
     <button class="btn perigo peq" id="leitor-fechar" onclick="fecharLeitor()">✕ Desligar</button>
   </div>
   <div id="leitor"></div>
+  <div id="leitor-botoes" style="display:none">
+    <button class="btn peq" id="b-lanterna" style="display:none" onclick="lanterna()">🔦 Lanterna</button>
+    <button class="btn peq" id="b-foto" onclick="$('foto-input').click()">📸 Tirar foto</button>
+    <input type="file" id="foto-input" accept="image/*" capture="environment" hidden onchange="lerFoto(this)">
+  </div>
   <p id="leitor-dica" style="color:#ddd;font-size:13px;text-align:center;margin:6px 0">Aponta para o quadradinho (Data Matrix) ou para o código de barras</p>
   <div id="leitor-res"></div>
 </div>
@@ -1580,31 +1591,115 @@ function bip(erro) {
   } catch (e) {}
 }
 
+/* ---- motor de leitura: o do próprio telemóvel (se ler Data Matrix) ou ZXing em WebAssembly ---- */
+const FORMATOS = ['data_matrix', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code'];
+const ZXING_URL = 'https://fastly.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js';
+let detetor = null, detetorPromessa = null;
+function obterDetetor() {
+  if (detetor) return Promise.resolve(detetor);
+  return detetorPromessa = detetorPromessa || (async () => {
+    try {
+      if ('BarcodeDetector' in window) {
+        const sup = await window.BarcodeDetector.getSupportedFormats();
+        if (sup.includes('data_matrix')) return detetor = new window.BarcodeDetector({ formats: FORMATOS.filter(f => sup.includes(f)) });
+      }
+    } catch (e) {}
+    const mod = await import(ZXING_URL);
+    return detetor = new mod.BarcodeDetector({ formats: FORMATOS });
+  })().catch(e => { detetorPromessa = null; throw e; });
+}
+function lido(txt) {
+  if (txt === ultima.txt && Date.now() - ultima.t < 4000) return;   // mesma caixa ainda à frente da câmara
+  ultima = { txt, t: Date.now() };
+  if (navigator.vibrate) navigator.vibrate(60);
+  bip(!lerGS1(txt).gtin && !lerGS1(txt).nregisto && !lerGS1(txt).validade);
+  const m = document.querySelector('#leitor .mira'); if (m) { m.classList.add('lido'); setTimeout(() => m.classList.remove('lido'), 600); }
+  tratarLeitura(txt);
+}
+
 async function abrirLeitor(modo, tipo) {
   prepararSom();
   modoLeitor = modo; painelAtual = null; ultima = { txt: '', t: 0 }; $('leitor-fechar').textContent = '✕ Desligar';
   filtroLeitor = modo === 'verificar' && tipo ? tipo : null;
   $('leitor-titulo').textContent = (TITULOS[modo] || '📷 Ler caixa') + (filtroLeitor ? ' · ' + NOME_TIPO[filtroLeitor] : '');
-  $('leitor-dica').textContent = modo === 'verificar' ? 'Lê as caixas uma a uma (quadradinho ou código de barras). A câmara fica ligada até carregares em Desligar.' : 'Aponta para o quadradinho (Data Matrix) ou para o código de barras';
-  $('leitor-res').innerHTML = ''; $('leitor').style.display = 'block';
+  $('leitor-dica').textContent = (modo === 'verificar' ? 'Lê as caixas uma a uma. A câmara fica ligada até carregares em Desligar. ' : '') +
+    'Põe o código dentro do quadrado, a 10–15 cm. Se não ler, usa 📸 Tirar foto.';
+  $('leitor-res').innerHTML = ''; $('leitor').style.display = 'block'; $('leitor-botoes').style.display = 'flex'; $('b-lanterna').style.display = 'none';
+  $('leitor').innerHTML = '<div class="cam"><video playsinline muted autoplay></video><div class="mira"></div></div>';
   $('leitorModal').style.display = 'flex';
+  try { await obterDetetor(); }
+  catch (e) { return abrirLeitorAntigo(); }   // sem o motor novo (ex.: sem internet para o descarregar): usa o antigo
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  } catch (e) { await fecharLeitor(); aviso('Não consegui abrir a câmara: ' + (e.message || e), 5000); return; }
+  if ($('leitorModal').style.display === 'none') { stream.getTracks().forEach(t => t.stop()); return; }   // fechado entretanto
+  const video = $('leitor').querySelector('video'); video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  const track = stream.getVideoTracks()[0];
+  try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (e) {}
+  let cap = {}; try { cap = track.getCapabilities ? track.getCapabilities() : {}; } catch (e) {}
+  $('b-lanterna').style.display = cap.torch ? '' : 'none';
+  leitor = { stream, track, video, ativo: true, luz: false, tela: document.createElement('canvas') };
+  ciclo(leitor);
+}
+/** lê ~8 vezes por segundo, só a zona do quadrado (mais rápido e com o código maior) */
+async function ciclo(l) {
+  if (!l.ativo || leitor !== l) return;
+  const v = l.video;
+  if (v.readyState >= 2 && v.videoWidth) {
+    try {
+      const w = v.videoWidth, hh = v.videoHeight, cw = Math.round(w * 0.8), ch = Math.round(hh * 0.8);
+      l.tela.width = cw; l.tela.height = ch;
+      l.tela.getContext('2d', { willReadFrequently: true }).drawImage(v, (w - cw) / 2, (hh - ch) / 2, cw, ch, 0, 0, cw, ch);
+      const r = await detetor.detect(l.tela);
+      if (r && r.length && l.ativo && leitor === l) lido(r[0].rawValue);
+    } catch (e) {}
+  }
+  if (l.ativo && leitor === l) setTimeout(() => ciclo(l), 120);
+}
+async function lanterna() {
+  if (!leitor || !leitor.track) return;
+  try { leitor.luz = !leitor.luz; await leitor.track.applyConstraints({ advanced: [{ torch: leitor.luz }] }); $('b-lanterna').textContent = leitor.luz ? '🔦 Desligar luz' : '🔦 Lanterna'; }
+  catch (e) { aviso('A lanterna não funciona neste telemóvel.'); }
+}
+/** foto: muito mais resolução do que o vídeo, a forma mais fiável para os Data Matrix difíceis */
+async function lerFoto(input) {
+  const f = input.files && input.files[0]; input.value = ''; if (!f) return;
+  aviso('📸 A ler a foto…', 8000);
+  try {
+    const d = await obterDetetor();
+    const img = await createImageBitmap(f);
+    let r = await d.detect(img);
+    if (!r.length && img.width > 2400) {   // fotos enormes: tenta também uma versão reduzida
+      const c = document.createElement('canvas'), k = 2400 / img.width;
+      c.width = 2400; c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      r = await d.detect(c);
+    }
+    $('aviso').style.display = 'none';
+    if (r.length) { ultima = { txt: '', t: 0 }; lido(r[0].rawValue); }
+    else { bip(true); aviso('Não encontrei nenhum código na foto. Tenta mais perto, com luz e sem reflexo.', 5000); }
+  } catch (e) { aviso('Não consegui ler a foto: ' + (e.message || e), 5000); }
+}
+
+/* leitor antigo (html5-qrcode), só se o novo não carregar */
+async function abrirLeitorAntigo() {
+  $('leitor').innerHTML = ''; $('b-foto').style.display = 'none';
   try { await carregarLib(); }
   catch (e) { $('leitorModal').style.display = 'none'; aviso('Leitor indisponível (' + e.message + '). Cola o código à mão.'); return; }
   const F = Html5QrcodeSupportedFormats;
   leitor = new Html5Qrcode('leitor', { formatsToSupport: [F.DATA_MATRIX, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.CODE_93, F.ITF, F.CODABAR, F.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
   try {
-    await leitor.start({ facingMode: 'environment' }, { fps: 12, qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(Math.min(w * 0.55, h * 0.8)) }) }, txt => {
-      if (txt === ultima.txt && Date.now() - ultima.t < 4000) return;   // mesma caixa ainda à frente da câmara
-      ultima = { txt, t: Date.now() };
-      if (navigator.vibrate) navigator.vibrate(60);
-      bip(!lerGS1(txt).gtin && !lerGS1(txt).nregisto && !lerGS1(txt).validade);
-      tratarLeitura(txt);
-    });
+    await leitor.start({ facingMode: 'environment' }, { fps: 12, qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(Math.min(w * 0.55, h * 0.8)) }) }, lido);
   } catch (e) { await fecharLeitor(); aviso('Não consegui abrir a câmara: ' + e, 5000); }
 }
 async function pararCamara() {
-  try { if (leitor && leitor.isScanning) await leitor.stop(); if (leitor) leitor.clear(); } catch (e) {}
-  leitor = null; $('leitor').style.display = 'none';
+  try {
+    if (leitor && leitor.stream) { leitor.ativo = false; leitor.stream.getTracks().forEach(t => t.stop()); }
+    else if (leitor && leitor.isScanning) { await leitor.stop(); leitor.clear(); }
+  } catch (e) {}
+  leitor = null; $('leitor').innerHTML = ''; $('leitor').style.display = 'none'; $('leitor-botoes').style.display = 'none'; $('b-foto').style.display = '';
 }
 function mudarLeitorPara(tipo) {
   filtroLeitor = tipo; pref.tipo = tipo; guardarPref(); desenharInventario();
